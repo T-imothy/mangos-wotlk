@@ -859,6 +859,11 @@ void WorldSession::HandleMoverRelocation(MovementInfo& movementInfo)
     }
     else                                                    // creature charmed
     {
+        // TrinityCore and AzerothCore persist the complete movement record
+        // for every controlled mover before relocation. CMaNGOS previously
+        // updated only the creature's world coordinates here, leaving its
+        // transport-local orientation stale for the next transport update.
+        mover->m_movementInfo = movementInfo;
         if (mover->IsInWorld())
             mover->GetMap()->CreatureRelocation((Creature*)mover, movementInfo.GetPos().x, movementInfo.GetPos().y, movementInfo.GetPos().z, movementInfo.GetPos().o);
     }
@@ -896,15 +901,18 @@ bool WorldSession::ProcessMovementInfo(MovementInfo& movementInfo, Unit* mover, 
     if (plMover && plMover->IsBeingTeleported() && recv_data.GetOpcode() != CMSG_MOVE_SET_COLLISION_HGT_ACK)
         return false;
 
-    // Fixed-position vehicles (turrets and cannons) are rooted but may still
-    // rotate.  The 3.3.5 client omits ROOT from some controlled-vehicle turn
-    // packets; rejecting those packets snaps the camera back and makes ICC's
-    // gunship cannons appear locked.  Preserve turning while preventing every
-    // form of translation the fixed-position DBC flag is meant to forbid.
-    if (mover->IsVehicle())
+    // ICC gunship cannons are rooted transport passengers, but their aim is
+    // controlled by client movement packets. Match the Trinity/AzerothCore
+    // fixed-vehicle path: retain authoritative world and transport offsets,
+    // while accepting the complete client-reported orientation state.
+    if (mover->GetEntry() == 36838 || mover->GetEntry() == 36839)
         if (VehicleInfo* vehicleInfo = mover->GetVehicleInfo())
             if (vehicleInfo->GetVehicleEntry()->m_flags & VEHICLE_FLAG_FIXED_POSITION)
             {
+                // The rooted client cannot translate the cannon. Do not
+                // rewrite either its world or transport position block here:
+                // both reference cores persist that complete packet, and its
+                // paired orientations must remain in the same client frame.
                 movementInfo.RemoveMovementFlag(MOVEFLAG_MASK_MOVING);
                 movementInfo.AddMovementFlag(MOVEFLAG_ROOT);
             }

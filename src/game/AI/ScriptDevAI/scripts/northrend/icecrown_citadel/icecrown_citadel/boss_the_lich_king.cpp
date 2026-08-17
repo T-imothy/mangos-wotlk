@@ -23,6 +23,7 @@ EndScriptData */
 
 #include "AI/ScriptDevAI/include/sc_common.h"
 #include "icecrown_citadel.h"
+#include "Movement/MoveSplineInit.h"
 #include "Spells/Scripts/SpellScript.h"
 
 enum
@@ -194,9 +195,16 @@ enum
     NPC_TERENAS_FM_HEROIC       = 39217,
     NPC_WICKED_SPIRIT           = 39190,
     NPC_SPIRIT_BOMB             = 39189,
+    NPC_DRUDGE_GHOUL            = 37695,
     NPC_SHAMBLING_HORROR        = 37698,
     NPC_VALKYR_SHADOWGUARD      = 36609,
     NPC_VILE_SPIRIT             = 37799,
+
+    // 3.3.5 creature-template factions used by the retail encounter.  Some
+    // spell-summoned creatures do not inherit their template faction on this
+    // core, so restore the original per-creature value at the summon boundary.
+    FACTION_SCOURGE_MONSTER     = 21,
+    FACTION_HOSTILE_MONSTER     = 14,
 };
 
 enum Phase
@@ -251,6 +259,7 @@ enum TirionData
 {
     GOSSIP_ACTION_START_LICH_KING = GOSSIP_ACTION_INFO_DEF + 1,
     POINT_TIRION_INTRO = 20,
+    POINT_TIRION_CHARGE = 21,
 };
 
 static const float fLichKingPosition[11][3] =
@@ -267,6 +276,25 @@ static const float fLichKingPosition[11][3] =
     {457.03f, -2155.08f, 1040.86f},    // 9 Val'kyr drop point left to Frozen Throne
     {494.31f, -2523.08f, 1249.87f},    // 10 center of platform inside Frostmourne
 };
+
+namespace
+{
+void LaunchLichKingIntroWalk(Creature* lichKing)
+{
+    Movement::PointsArray path;
+    path.push_back(Vector3(lichKing->GetPositionX(), lichKing->GetPositionY(), lichKing->GetPositionZ()));
+    path.push_back(Vector3(432.0851f, -2123.673f, 1064.6582f));
+    path.push_back(Vector3(457.8351f, -2123.423f, 1041.1582f));
+    path.push_back(Vector3(465.0730f, -2123.470f, 1040.8569f));
+
+    Movement::MoveSplineInit movement(*lichKing);
+    movement.MovebyPath(path);
+    movement.SetWalk(true);
+    movement.SetVelocity(3.5f);
+    movement.SetFacing(0.0f);
+    movement.Launch();
+}
+}
 
 struct boss_the_lich_king_iccAI : public ScriptedAI
 {
@@ -300,17 +328,18 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
     uint8 m_uiIntroStep;
     ObjectGuid m_frostmourneTargetGuid;
     GuidList m_frostmourneSummons;
+    GuidList m_encounterSummons;
 
     void Reset() override
     {
         m_uiPhase               = PHASE_INTRO;
 
         m_uiBerserkTimer        = 15 * MINUTE * IN_MILLISECONDS;
-        m_uiGhoulsTimer         = 13000;
-        m_uiHorrorTimer         = 21000;
-        m_uiInfestTimer         = 20000;
-        m_uiNecroticPlagueTimer = 23000;
-        m_uiShadowTrapTimer     = 15000;
+        m_uiGhoulsTimer         = 10000;
+        m_uiHorrorTimer         = 15000;
+        m_uiInfestTimer         = 5000;
+        m_uiNecroticPlagueTimer = urand(30000, 31000);
+        m_uiShadowTrapTimer     = 15500;
         m_uiPainSufferingTimer  = 6000;
         m_uiRagingSpiritTimer   = 20000;
         m_uiIceSphereTimer      = 6000;
@@ -324,6 +353,7 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
         m_uiIntroStep           = 0;
         m_frostmourneTargetGuid.Clear();
         m_frostmourneSummons.clear();
+        m_encounterSummons.clear();
 
         m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER);
 
@@ -336,6 +366,7 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
         if (m_pInstance)
             m_pInstance->SetData(TYPE_LICH_KING, IN_PROGRESS);
 
+        SetCombatMovement(true);
         DoScriptText(SAY_AGGRO, m_creature);
         m_uiPhase = PHASE_ONE;
     }
@@ -348,9 +379,10 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
         if (m_pInstance)
             m_pInstance->SetData(TYPE_LICH_KING, IN_PROGRESS);
         m_uiIntroStep = 1;
-        m_uiPhaseTimer = 4000;
+        m_uiPhaseTimer = 11000;
         DoScriptText(SAY_INTRO_1, m_creature);
         m_creature->SetStandState(UNIT_STAND_STATE_STAND);
+        LaunchLichKingIntroWalk(m_creature);
     }
 
     void KilledUnit(Unit* pWho) override
@@ -359,20 +391,83 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
             DoScriptText(urand(0, 1) ? SAY_SLAY_1 : SAY_SLAY_2, m_creature);
     }
 
+    void DamageTaken(Unit*, uint32& damage, DamageEffectType, SpellEntry const*) override
+    {
+        // Do not allow a large hit (including the GM damage command used by
+        // testers) to skip one of the two retail transitions or the scripted
+        // ten-percent finale.  Normal raid damage is unchanged until it
+        // reaches the threshold belonging to the current encounter phase.
+        uint32 floorPct = 0;
+        switch (m_uiPhase)
+        {
+            case PHASE_ONE:
+            case PHASE_RUNNING_WINTER_ONE:
+            case PHASE_TRANSITION_ONE:
+            case PHASE_QUAKE_ONE:
+                floorPct = 70;
+                break;
+            case PHASE_TWO:
+            case PHASE_RUNNING_WINTER_TWO:
+            case PHASE_TRANSITION_TWO:
+            case PHASE_QUAKE_TWO:
+                floorPct = 40;
+                break;
+            case PHASE_THREE:
+            case PHASE_IN_FROSTMOURNE:
+                floorPct = 10;
+                break;
+            case PHASE_INTRO:
+            case PHASE_CUTSCENE:
+                damage = 0;
+                return;
+            default:
+                return;
+        }
+
+        uint32 const healthFloor = std::max<uint32>(1, m_creature->GetMaxHealth() * floorPct / 100);
+        if (m_creature->GetHealth() <= healthFloor)
+            damage = 0;
+        else if (damage >= m_creature->GetHealth() - healthFloor)
+            damage = m_creature->GetHealth() - healthFloor;
+    }
+
     void JustSummoned(Creature* summon) override
     {
         switch (summon->GetEntry())
         {
+            case NPC_DRUDGE_GHOUL:
             case NPC_SHAMBLING_HORROR:
+                // These are combat summons, never RP actors. Use the same
+                // hostile encounter faction as the remaining Lich King adds
+                // so a missing/variant DB faction cannot leave them friendly.
+                summon->SetFactionTemporary(FACTION_HOSTILE_MONSTER, TEMPFACTION_NONE);
+                summon->SetInCombatWithZone();
+                summon->AI()->AttackClosestEnemy();
+                if (Unit* victim = summon->GetVictim())
+                    summon->GetMotionMaster()->MoveChase(victim);
+                m_encounterSummons.push_back(summon->GetObjectGuid());
+                break;
             case NPC_RAGING_SPIRIT:
             case NPC_VALKYR_SHADOWGUARD:
-            case NPC_VILE_SPIRIT:
+                summon->SetFactionTemporary(FACTION_HOSTILE_MONSTER, TEMPFACTION_NONE);
                 summon->SetInCombatWithZone();
+                summon->AI()->AttackClosestEnemy();
+                if (Unit* victim = summon->GetVictim())
+                    summon->GetMotionMaster()->MoveChase(victim);
+                m_encounterSummons.push_back(summon->GetObjectGuid());
+                break;
+            case NPC_VILE_SPIRIT:
+                summon->SetFactionTemporary(FACTION_HOSTILE_MONSTER, TEMPFACTION_NONE);
+                summon->SetInCombatWithZone();
+                // Its own AI preserves the retail hover delay before it picks
+                // a target.  Starting an attack here skips that mechanic.
+                m_encounterSummons.push_back(summon->GetObjectGuid());
                 break;
             case NPC_ICE_SPHERE:
             case NPC_DEFILE:
             case NPC_SHADOW_TRAP:
                 summon->AI()->SetReactState(REACT_PASSIVE);
+                m_encounterSummons.push_back(summon->GetObjectGuid());
                 break;
             case NPC_TERENAS_FM_NORMAL:
             case NPC_TERENAS_FM_HEROIC:
@@ -381,6 +476,14 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                 m_frostmourneSummons.push_back(summon->GetObjectGuid());
                 break;
         }
+    }
+
+    void CleanupEncounterSummons()
+    {
+        for (GuidList::const_iterator itr = m_encounterSummons.begin(); itr != m_encounterSummons.end(); ++itr)
+            if (Creature* summon = m_creature->GetMap()->GetCreature(*itr))
+                summon->ForcedDespawn();
+        m_encounterSummons.clear();
     }
 
     void CleanupFrostmourneRoom()
@@ -449,19 +552,35 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
 
     void JustDied(Unit* /*pKiller*/) override
     {
+        CleanupEncounterSummons();
+        CleanupFrostmourneRoom();
         if (m_pInstance)
             m_pInstance->SetData(TYPE_LICH_KING, DONE);
 
         DoScriptText(SAY_OUTRO_14, m_creature);
 
-        DoCastSpellIfCan(m_creature, SPELL_PLAY_MOVIE, CAST_TRIGGERED);
+        // Spell 73159 requires a Player unit target for the registered
+        // PlayMovie spell script. An untargeted cast does not reliably build
+        // one on CMaNGOS, so cast the native encounter spell once per player.
+        for (auto& playerRef : m_creature->GetMap()->GetPlayers())
+            if (Player* player = playerRef.getSource())
+                m_creature->CastSpell(player, SPELL_PLAY_MOVIE, TRIGGERED_OLD_TRIGGERED);
     }
 
     void JustReachedHome() override
     {
+        CleanupEncounterSummons();
         CleanupFrostmourneRoom();
         if (m_pInstance)
+        {
             m_pInstance->SetData(TYPE_LICH_KING, FAIL);
+            if (Creature* tirion = m_pInstance->GetSingleCreatureFromStorage(NPC_TIRION_FORDRING))
+            {
+                tirion->RemoveAurasDueToSpell(SPELL_ICE_LOCK);
+                tirion->CombatStop(true);
+                tirion->GetMotionMaster()->MoveTargetedHome();
+            }
+        }
     }
 
     void MovementInform(uint32 uiMovementType, uint32 uiData) override
@@ -482,9 +601,9 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                     m_uiPhase = PHASE_TRANSITION_ONE;
                     m_uiPhaseTimer          = 62000;
 
-                    m_uiPainSufferingTimer = 6000;
-                    m_uiRagingSpiritTimer = 20000;
-                    m_uiIceSphereTimer = 6000;
+                    m_uiPainSufferingTimer = 3500;
+                    m_uiRagingSpiritTimer = 4000;
+                    m_uiIceSphereTimer = 8000;
                 }
                 else if (m_uiPhase == PHASE_RUNNING_WINTER_TWO)
                 {
@@ -495,9 +614,9 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                     m_uiPhase = PHASE_TRANSITION_TWO;
                     m_uiPhaseTimer          = 62000;
 
-                    m_uiPainSufferingTimer = 6000;
-                    m_uiRagingSpiritTimer = 15000;
-                    m_uiIceSphereTimer = 6000;
+                    m_uiPainSufferingTimer = 3500;
+                    m_uiRagingSpiritTimer = 4000;
+                    m_uiIceSphereTimer = 8000;
                 }
                 else if (m_uiPhase == PHASE_DEATH_AWAITS)
                 {
@@ -513,9 +632,23 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
     {
         if (m_uiPhase != PHASE_INTRO && m_uiPhase != PHASE_DEATH_AWAITS)
         {
-            // check evade
+            // Transition, quake and Frostmourne timers must continue without
+            // a current melee victim. Retail deliberately makes the boss
+            // stationary/unattackable during parts of these states, and a
+            // solo player or threat reset can otherwise freeze the encounter
+            // forever before the next phase begins.
+            bool const victimRequired = m_uiPhase == PHASE_ONE ||
+                m_uiPhase == PHASE_TWO || m_uiPhase == PHASE_THREE;
             if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
-                return;
+            {
+                if (victimRequired)
+                {
+                    m_creature->SetInCombatWithZone();
+                    m_creature->AI()->AttackClosestEnemy();
+                    if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
+                        return;
+                }
+            }
 
             // Berserk
             if (m_uiBerserkTimer)
@@ -548,20 +681,41 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
 
                 switch (++m_uiIntroStep)
                 {
-                    case 2: DoScriptText(SAY_INTRO_2, m_creature); m_uiPhaseTimer = 9000; break;
-                    case 3: DoScriptText(SAY_INTRO_3, m_creature); m_uiPhaseTimer = 7000; break;
-                    case 4: DoScriptText(SAY_INTRO_4, m_creature); m_uiPhaseTimer = 13000; break;
+                    case 2:
+                        if (Creature* tirion = m_pInstance ? m_pInstance->GetSingleCreatureFromStorage(NPC_TIRION_FORDRING) : nullptr)
+                            DoScriptText(SAY_INTRO_2, tirion);
+                        m_uiPhaseTimer = 9000;
+                        break;
+                    case 3:
+                        DoScriptText(SAY_INTRO_3, m_creature);
+                        m_uiPhaseTimer = 25000;
+                        break;
+                    case 4:
+                        if (Creature* tirion = m_pInstance ? m_pInstance->GetSingleCreatureFromStorage(NPC_TIRION_FORDRING) : nullptr)
+                        {
+                            DoScriptText(SAY_INTRO_4, tirion);
+                            tirion->SetWalk(false);
+                            tirion->GetMotionMaster()->MovePoint(POINT_TIRION_CHARGE, 482.902f, -2124.479f, 1040.857f, FORCED_MOVEMENT_RUN);
+                        }
+                        m_uiPhaseTimer = 6000;
+                        break;
                     case 5:
                         DoScriptText(SAY_INTRO_5, m_creature);
                         if (Creature* tirion = m_pInstance ? m_pInstance->GetSingleCreatureFromStorage(NPC_TIRION_FORDRING) : nullptr)
                             DoCastSpellIfCan(tirion, SPELL_ICE_LOCK, CAST_TRIGGERED);
-                        m_uiPhaseTimer = 2000;
+                        m_uiPhaseTimer = 5000;
                         break;
                     default:
                         m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER);
-                        m_creature->SetInCombatWithZone();
+                        // Leave the intro state before selecting a victim so
+                        // an empty/solo threat list cannot replay this branch
+                        // every server tick.
                         m_uiPhase = PHASE_ONE;
-                        DoScriptText(SAY_AGGRO, m_creature);
+                        SetCombatMovement(true);
+                        m_creature->SetInCombatWithZone();
+                        m_creature->AI()->AttackClosestEnemy();
+                        if (Unit* victim = m_creature->GetVictim())
+                            m_creature->GetMotionMaster()->MoveChase(victim);
                         break;
                 }
                 return;
@@ -649,6 +803,12 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                 // phase end timer
                 if (m_uiPhaseTimer < uiDiff)
                 {
+                    // Remorseless Winter is still channeling when the
+                    // transition timer expires.  Quake cannot begin until
+                    // that channel is explicitly ended (retail/TC/AC
+                    // transition ordering).
+                    m_creature->InterruptNonMeleeSpells(false);
+                    m_creature->clearUnitState(UNIT_STAT_CHANNELING);
                     if (DoCastSpellIfCan(m_creature, SPELL_QUAKE) == CAST_OK)
                     {
                         DoScriptText(SAY_SHATTER_ARENA, m_creature);
@@ -703,9 +863,27 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                     if (m_pInstance)
                         m_pInstance->SetLichKingPlatformDamaged(true);
 
-                    m_uiPhase = (m_uiPhase == PHASE_QUAKE_ONE ? PHASE_TWO : PHASE_THREE);
+                    bool const firstTransition = m_uiPhase == PHASE_QUAKE_ONE;
+                    m_uiPhase = firstTransition ? PHASE_TWO : PHASE_THREE;
+                    if (firstTransition)
+                    {
+                        m_uiInfestTimer = 14000;
+                        m_uiValkyrTimer = 20000;
+                        m_uiSoulReaperTimer = 40000;
+                        m_uiDefileTimer = 38000;
+                    }
+                    else
+                    {
+                        m_uiSoulReaperTimer = 40000;
+                        m_uiDefileTimer = 38000;
+                        m_uiVileSpiritsTimer = 20000;
+                        m_uiHarvestSoulTimer = 14000;
+                    }
                     m_creature->GetMotionMaster()->Clear();
-                    m_creature->GetMotionMaster()->MoveChase(m_creature->GetVictim());
+                    m_creature->SetInCombatWithZone();
+                    m_creature->AI()->AttackClosestEnemy();
+                    if (m_creature->GetVictim())
+                        m_creature->GetMotionMaster()->MoveChase(m_creature->GetVictim());
                 }
                 else
                     m_uiPhaseTimer -= uiDiff;
@@ -749,7 +927,7 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                     if (Unit* pTarget = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 1, SPELL_DEFILE, SELECT_FLAG_PLAYER))
                     {
                         if (DoCastSpellIfCan(pTarget, SPELL_DEFILE) == CAST_OK)
-                            m_uiDefileTimer = 30000;
+                            m_uiDefileTimer = 32500;
                     }
                 }
                 else
@@ -762,7 +940,7 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                     if (DoCastSpellIfCan(m_creature, valkyrSpell) == CAST_OK)
                     {
                         DoScriptText(SAY_SUMMON_VALKYR, m_creature);
-                        m_uiValkyrTimer = 50000;
+                        m_uiValkyrTimer = 45000;
                     }
                 }
                 else
@@ -783,6 +961,9 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                         m_uiPhase = PHASE_DEATH_AWAITS;
 
                         m_creature->AttackStop();
+                        SetCombatMovement(false);
+                        m_creature->GetMotionMaster()->Clear(false, true);
+                        m_creature->GetMotionMaster()->MoveIdle();
                         m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER);
                         m_uiEndingStep = 1;
                         m_uiEndingTimer = 8000;
@@ -807,7 +988,7 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                     if (Unit* pTarget = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 1, SPELL_DEFILE, SELECT_FLAG_PLAYER))
                     {
                         if (DoCastSpellIfCan(pTarget, SPELL_DEFILE) == CAST_OK)
-                            m_uiDefileTimer = 30000;
+                            m_uiDefileTimer = 32500;
                     }
                 }
                 else
@@ -828,7 +1009,7 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                         if (DoCastSpellIfCan(pTarget, m_bIsHeroic ? SPELL_HARVEST_SOULS : SPELL_HARVEST_SOUL) == CAST_OK)
                         {
                             DoScriptText(SAY_HARVEST_SOUL, m_creature);
-                            m_uiHarvestSoulTimer = m_bIsHeroic ? 120000 : 70000;
+                            m_uiHarvestSoulTimer = m_bIsHeroic ? urand(100000, 110000) : 75000;
 
                             if (m_bIsHeroic)
                             {
@@ -1101,6 +1282,14 @@ bool GossipSelect_npc_tirion_fordring_tft(Player* player, Creature* creature, ui
         return false;
 
     player->CLOSE_GOSSIP_MENU();
+    instance_icecrown_citadel* instance = static_cast<instance_icecrown_citadel*>(creature->GetInstanceData());
+    if (!instance || instance->IsEncounterInProgress() || instance->GetData(TYPE_LICH_KING) == DONE)
+        return false;
+
+    // Claim the intro at selection, before Tirion starts moving. This makes
+    // the RP single-owner and prevents a second click/reset from overlapping
+    // the first dialogue sequence.
+    instance->SetData(TYPE_LICH_KING, IN_PROGRESS);
     creature->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
     creature->SetWalk(true);
     creature->GetMotionMaster()->MovePoint(POINT_TIRION_INTRO, 489.297f, -2124.840f, 1040.857f);

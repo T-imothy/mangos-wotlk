@@ -41,6 +41,10 @@ enum ValithriaTexts
 enum ValithriaSpells
 {
     // Valithria and the dream realm
+    SPELL_DREAM_PORTAL_VISUAL_PRE   = 71304,
+    SPELL_NIGHTMARE_PORTAL_VISUAL_PRE = 71986,
+    SPELL_DREAM_PORTAL_VISUAL       = 70763,
+    SPELL_NIGHTMARE_PORTAL_VISUAL   = 71994,
     SPELL_TWISTED_NIGHTMARES        = 71941,
     SPELL_NIGHTMARE_CLOUD           = 71970,
     SPELL_NIGHTMARE_CLOUD_VISUAL    = 71939,
@@ -51,6 +55,12 @@ enum ValithriaSpells
     SPELL_IMMUNITY                  = 72724,
     SPELL_CORRUPTION                = 70904,
     SPELL_DREAM_SLIP                = 71196,
+    SPELL_SPAWN_CACHE_10_NORMAL     = 71207,
+    SPELL_SPAWN_CACHE_25_NORMAL     = 72910,
+    SPELL_SPAWN_CACHE_10_HEROIC     = 72911,
+    SPELL_SPAWN_CACHE_25_HEROIC     = 72912,
+    SPELL_ACHIEVEMENT_CHECK         = 72706,
+    SPELL_AWARD_REPUTATION          = 73843,
 
     // Risen Archmage
     SPELL_ARCHMAGE_CORRUPTION       = 70602,
@@ -78,6 +88,8 @@ enum ValithriaCreatures
     NPC_MANA_VOID               = 38068,
     NPC_COLUMN_OF_FROST         = 37918,
     NPC_ROT_WORM                = 37907,
+    NPC_DREAM_PORTAL_PRE_EFFECT = 38186,
+    NPC_NIGHTMARE_PORTAL_PRE_EFFECT = 38429,
     NPC_NIGHTMARE_PORTAL        = 38430,
     NPC_NIGHTMARE_CLOUD         = 38421,
     NPC_DREAM_PORTAL            = 37945,
@@ -98,6 +110,27 @@ static ValithriaSpawnLocation const aValithriaGateLocations[4] =
     {4223.405f, 2465.113f, 364.961f},
 };
 
+// Retail Dream Cloud locations, shared by the normal and heroic dream realms.
+// These actors are encounter-owned instead of relying on an unoccupied phased
+// grid to load persistent DB spawns before the first healer enters the Dream.
+static ValithriaSpawnLocation const aValithriaDreamCloudLocations[] =
+{
+    {4155.51f, 2478.76f, 382.494f},
+    {4158.75f, 2494.08f, 384.334f},
+    {4172.57f, 2464.47f, 385.368f},
+    {4173.67f, 2504.13f, 386.174f},
+    {4181.62f, 2514.91f, 386.374f},
+    {4186.72f, 2450.97f, 388.373f},
+    {4200.96f, 2456.00f, 387.128f},
+    {4202.23f, 2508.00f, 383.985f},
+    {4220.35f, 2515.16f, 388.649f},
+    {4222.26f, 2455.20f, 385.568f},
+    {4231.61f, 2464.44f, 389.011f},
+    {4236.75f, 2500.62f, 383.373f},
+    {4243.29f, 2476.89f, 386.076f},
+    {4244.83f, 2493.18f, 387.677f},
+};
+
 static uint32 const aCleanupEntries[] =
 {
     NPC_RISEN_ARCHMAGE,
@@ -108,6 +141,8 @@ static uint32 const aCleanupEntries[] =
     NPC_MANA_VOID,
     NPC_COLUMN_OF_FROST,
     NPC_ROT_WORM,
+    NPC_DREAM_PORTAL_PRE_EFFECT,
+    NPC_NIGHTMARE_PORTAL_PRE_EFFECT,
     NPC_NIGHTMARE_PORTAL,
     NPC_NIGHTMARE_CLOUD,
     NPC_DREAM_PORTAL,
@@ -184,14 +219,25 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
     void AttackStart(Unit* /*who*/) override { }
     void MoveInLineOfSight(Unit* /*who*/) override { }
 
-    void HealedBy(Unit* /*healer*/, uint32& /*healedAmount*/) override
+    void HealedBy(Unit* /*healer*/, uint32& healedAmount) override
     {
         if (m_instance)
         {
             uint32 state = m_instance->GetData(TYPE_VALITHRIA);
             if (state != IN_PROGRESS && state != DONE)
+            {
                 m_instance->SetData(TYPE_VALITHRIA, IN_PROGRESS);
+                StartEncounter();
+            }
         }
+
+        // HealedBy is called after the core has applied the heal. Victory is
+        // therefore the callback which leaves Valithria at full health. A
+        // generic UpdateAI health check can falsely finish a freshly loaded
+        // encounter before its 50% reset has been applied.
+        if (m_encounterActive && !m_victory &&
+                m_creature->GetHealth() >= m_creature->GetMaxHealth())
+            CompleteEncounter();
     }
 
     void DamageTaken(Unit* /*dealer*/, uint32& damage, DamageEffectType /*damageType*/, SpellEntry const* /*spellInfo*/) override
@@ -222,11 +268,23 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
 
     void JustDied(Unit* /*killer*/) override
     {
-        if (!m_victory)
-        {
-            DoScriptText(SAY_0_HEALTH, m_creature);
-            FailEncounter();
-        }
+        if (m_victory)
+            return;
+
+        // Ordinary encounter damage is stopped in DamageTaken before it can
+        // kill Valithria.  Forced kills (including GM testing) bypass that
+        // hook, however, and previously left the static boss spawn dead for
+        // its database respawn period because FailEncounter returned when the
+        // scheduler had not started.  Always restore the failed encounter and
+        // give this one death a short respawn; Reset() then restores the
+        // blizzlike 50-percent starting health.
+        DoScriptText(SAY_0_HEALTH, m_creature);
+        m_encounterActive = false;
+        if (m_instance && m_instance->GetData(TYPE_VALITHRIA) != DONE)
+            m_instance->SetData(TYPE_VALITHRIA, FAIL);
+        CleanupEncounterCreatures(true);
+        ClearDreamAuras();
+        m_creature->SetRespawnDelay(10, true);
     }
 
     void JustSummoned(Creature* summoned) override
@@ -235,6 +293,8 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
 
         switch (summoned->GetEntry())
         {
+            case NPC_DREAM_PORTAL_PRE_EFFECT:
+            case NPC_NIGHTMARE_PORTAL_PRE_EFFECT:
             case NPC_DREAM_PORTAL:
             case NPC_NIGHTMARE_PORTAL:
                 summoned->SetPhaseMask(1, true);
@@ -242,11 +302,17 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
                 break;
             case NPC_DREAM_CLOUD:
                 summoned->SetPhaseMask(16, true);
+                summoned->SetLevitate(true);
+                summoned->SetAnimTier(AnimTier::Hover);
+                summoned->SetWalk(false);
                 summoned->CastSpell(summoned, SPELL_DREAM_CLOUD_VISUAL, TRIGGERED_OLD_TRIGGERED);
                 summoned->AI()->SetReactState(REACT_PASSIVE);
                 break;
             case NPC_NIGHTMARE_CLOUD:
                 summoned->SetPhaseMask(16, true);
+                summoned->SetLevitate(true);
+                summoned->SetAnimTier(AnimTier::Hover);
+                summoned->SetWalk(false);
                 summoned->CastSpell(summoned, SPELL_NIGHTMARE_CLOUD_VISUAL, TRIGGERED_OLD_TRIGGERED);
                 summoned->CastSpell(summoned, SPELL_NIGHTMARE_CLOUD, TRIGGERED_OLD_TRIGGERED);
                 summoned->AI()->SetReactState(REACT_PASSIVE);
@@ -264,6 +330,12 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
         }
     }
 
+    void ReceiveAIEvent(AIEventType eventType, Unit* /*sender*/, Unit* /*invoker*/, uint32 /*miscValue*/) override
+    {
+        if (eventType == AI_EVENT_CUSTOM_A)
+            StartEncounter();
+    }
+
     void KilledUnit(Unit* victim) override
     {
         if (victim->GetTypeId() == TYPEID_PLAYER)
@@ -275,6 +347,19 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
         if (m_encounterActive || m_victory)
             return;
 
+        // Valithria always begins a fresh attempt at 50 percent health.  The
+        // static creature can be restored by the grid before its AI Reset is
+        // delivered (most visibly after a server restart), so enforce the
+        // encounter invariant at the actual attempt boundary as well.
+        m_creature->SetHealth(m_creature->GetMaxHealth() / 2);
+
+        // Valithria is a passive healing target, but she is still a participant
+        // in the encounter.  Keep her in zone combat so the generic creature
+        // regeneration pass cannot add one third of her maximum health every
+        // five seconds while the raid is fighting around her.  The world DB
+        // also disables idle health regeneration for the pre-pull state.
+        m_creature->SetInCombatWithZone();
+
         m_encounterActive = true;
         m_elapsedTime = 0;
         m_portalsSpawned = 0;
@@ -282,6 +367,20 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
         if (m_instance)
             m_instance->SetSpecialAchievementCriteria(TYPE_ACHIEV_PORTAL_JOCKEY, true);
         DoScriptText(SAY_AGGRO, m_creature);
+
+        // Populate the phase-only dream realm as part of this encounter.
+        // Persistent phased DB actors are not guaranteed to load before the
+        // first player enters phase 16, which left the realm completely empty.
+        uint32 cloudEntry = m_instance && m_instance->IsHeroicDifficulty() ?
+            NPC_NIGHTMARE_CLOUD : NPC_DREAM_CLOUD;
+        uint32 cloudCount = cloudEntry == NPC_NIGHTMARE_CLOUD ? 10 :
+            sizeof(aValithriaDreamCloudLocations) / sizeof(ValithriaSpawnLocation);
+        for (uint32 i = 0; i < cloudCount; ++i)
+        {
+            ValithriaSpawnLocation const& location = aValithriaDreamCloudLocations[i];
+            m_creature->SummonCreature(cloudEntry, location.x, location.y, location.z,
+                0.0f, TEMPSPAWN_MANUAL_DESPAWN, 0);
+        }
 
         // Pull every initial channeler when any one of them (or Valithria) is
         // engaged. The four static spawns are the retail encounter starters.
@@ -325,35 +424,40 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
     {
         bool heroic = m_instance && m_instance->IsHeroicDifficulty();
         bool is25Man = m_instance && m_instance->Is25ManDifficulty();
-        uint32 portalEntry = heroic ? NPC_NIGHTMARE_PORTAL : NPC_DREAM_PORTAL;
-        uint32 cloudEntry = heroic ? NPC_NIGHTMARE_CLOUD : NPC_DREAM_CLOUD;
         uint32 portalCount = is25Man ? 8 : 3;
-        float angleRange = is25Man ? 6.28318531f : 3.14159265f;
+
+        uint32 preEffectEntry = heroic ? NPC_NIGHTMARE_PORTAL_PRE_EFFECT : NPC_DREAM_PORTAL_PRE_EFFECT;
 
         if (!heroic)
             DoScriptText(SAY_PORTAL, m_creature);
 
+        // Retail first creates Dream/Nightmare Portal pre-effects. Fifteen
+        // seconds later each precursor becomes a six-second usable portal.
+        // Trinity and AzerothCore obtain these actors through a spell script;
+        // ScriptDev2 has no equivalent target selector, so create the exact
+        // retail precursor entries at the selected positions here.
         for (uint32 i = 0; i < portalCount; ++i)
         {
-            float angle = 4.71238898f + frand(0.0f, angleRange);
+            // Retail distributes 10-player portals across the near half of
+            // the room and 25-player portals around the full circle, 20-30
+            // yards from Valithria. Preserve those positions for the bounded
+            // fallback below in case this core does not execute the summon
+            // effect embedded in the native location-variant spell.
+            float angle = 4.71238898f + frand(0.0f, is25Man ? 6.28318531f : 3.14159265f);
             float distance = frand(20.0f, 30.0f);
             float x = m_creature->GetPositionX() + std::cos(angle) * distance;
             float y = m_creature->GetPositionY() + std::sin(angle) * distance;
-            m_creature->SummonCreature(portalEntry, x, y, m_creature->GetPositionZ(), angle,
-                TEMPSPAWN_TIMED_DESPAWN, 15000);
-            ++m_portalsSpawned;
+            m_creature->SummonCreature(preEffectEntry, x, y,
+                m_creature->GetPositionZ(), angle, TEMPSPAWN_TIMED_DESPAWN, 21000);
         }
 
-        // Clouds live only in phase 16 and are consumed by players in Dream State.
-        for (uint32 i = 0; i < portalCount * 3; ++i)
-        {
-            float angle = frand(0.0f, 6.28318531f);
-            float distance = frand(10.0f, 38.0f);
-            float x = m_creature->GetPositionX() + std::cos(angle) * distance;
-            float y = m_creature->GetPositionY() + std::sin(angle) * distance;
-            m_creature->SummonCreature(cloudEntry, x, y, m_creature->GetPositionZ() + frand(0.0f, 4.0f), angle,
-                TEMPSPAWN_TIMED_DESPAWN, 40000);
-        }
+        m_portalsSpawned += portalCount;
+
+        // Dream/Nightmare Clouds are permanent phase-specific world spawns.
+        // Their normal 30-second DB respawn drives replenishment after a
+        // player consumes one. Do not recreate them per portal wave: doing so
+        // duplicates the retail actors and makes an entire wave expire at the
+        // same instant even when nobody entered the Dream.
     }
 
     bool HasLivingPlayersNearby() const
@@ -362,8 +466,12 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
         for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
         {
             Player* player = itr->getSource();
+            // Players inside the Emerald Dream use a different phase mask,
+            // but they are still active encounter participants.  Ignoring
+            // phase here prevents the solo/last healer entering a portal
+            // from being mistaken for a full raid wipe.
             if (player && player->IsAlive() && !player->IsGameMaster() &&
-                m_creature->IsWithinDistInMap(player, 120.0f))
+                m_creature->IsWithinDistInMap(player, 120.0f, true, true))
                 return true;
         }
         return false;
@@ -413,6 +521,11 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
                     creature->ForcedDespawn();
             }
         }
+
+        // The grid scan above handles loaded starters. The native spawn group
+        // also clears saved respawn timers and restores unloaded members.
+        if (respawnInitialArchmages && m_instance)
+            m_instance->RespawnValithriaStarterPack();
     }
 
     void FailEncounter()
@@ -438,6 +551,7 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
         m_victory = true;
         DoScriptText(SAY_VICTORY, m_creature);
         m_creature->RemoveAurasDueToSpell(SPELL_CORRUPTION);
+        DoCastSpellIfCan(m_creature, SPELL_ACHIEVEMENT_CHECK, CAST_TRIGGERED | CAST_FORCE_CAST);
         DoCastSpellIfCan(m_creature, SPELL_DREAMWALKER_RAGE);
 
         CleanupEncounterCreatures(false);
@@ -451,6 +565,17 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
         }
 
         m_dreamSlipTimer = 3500;
+    }
+
+    uint32 GetCacheSpawnSpell() const
+    {
+        if (!m_instance)
+            return SPELL_SPAWN_CACHE_10_NORMAL;
+
+        if (m_instance->IsHeroicDifficulty())
+            return m_instance->Is25ManDifficulty() ? SPELL_SPAWN_CACHE_25_HEROIC : SPELL_SPAWN_CACHE_10_HEROIC;
+
+        return m_instance->Is25ManDifficulty() ? SPELL_SPAWN_CACHE_25_NORMAL : SPELL_SPAWN_CACHE_10_NORMAL;
     }
 
     void UpdateSummonTimers(uint32 diff)
@@ -503,6 +628,13 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
             if (m_dreamSlipTimer <= diff)
             {
                 DoCastSpellIfCan(m_creature, SPELL_DREAM_SLIP);
+                // Retail uses the hidden Lich King controller at the cache
+                // location to cast the difficulty-specific summon spell.
+                // Keep that native path so the cache position, entry and
+                // loot template all agree with the active raid difficulty.
+                if (Creature* cacheController = GetClosestCreatureWithEntry(m_creature, NPC_THE_LICH_KING_VALITHRIA, 100.0f))
+                    cacheController->CastSpell(cacheController, GetCacheSpawnSpell(), TRIGGERED_OLD_TRIGGERED);
+                DoCastSpellIfCan(m_creature, SPELL_AWARD_REPUTATION, CAST_TRIGGERED | CAST_FORCE_CAST);
                 m_dreamSlipTimer = 0;
             }
             else
@@ -519,17 +651,10 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
             return;
 
         m_elapsedTime += diff;
-
         if (!m_said75Percent && m_creature->GetHealth() >= m_creature->GetMaxHealth() * 3 / 4)
         {
             m_said75Percent = true;
             DoScriptText(SAY_75_HEALTH, m_creature);
-        }
-
-        if (m_creature->GetHealth() >= m_creature->GetMaxHealth())
-        {
-            CompleteEncounter();
-            return;
         }
 
         if (m_wipeCheckTimer <= diff)
@@ -578,14 +703,26 @@ struct valithria_hostile_addAI : public ScriptedAI
 
     instance_icecrown_citadel* m_instance;
 
+    void StartValithriaEncounter()
+    {
+        if (!m_instance)
+            return;
+
+        uint32 state = m_instance->GetData(TYPE_VALITHRIA);
+        if (state != IN_PROGRESS && state != DONE)
+            m_instance->SetData(TYPE_VALITHRIA, IN_PROGRESS);
+
+        // Starting through one of the four channelers must wake Valithria's
+        // own encounter scheduler immediately.  Relying only on a later
+        // UpdateAI observation can leave the dragon and add waves in a
+        // partially initialized state during the pull transition.
+        if (Creature* valithria = m_instance->GetSingleCreatureFromStorage(NPC_VALITHRIA))
+            valithria->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, m_creature, valithria);
+    }
+
     void Aggro(Unit* /*who*/) override
     {
-        if (m_instance)
-        {
-            uint32 state = m_instance->GetData(TYPE_VALITHRIA);
-            if (state != IN_PROGRESS && state != DONE)
-                m_instance->SetData(TYPE_VALITHRIA, IN_PROGRESS);
-        }
+        StartValithriaEncounter();
         m_creature->SetInCombatWithZone();
     }
 
@@ -913,9 +1050,9 @@ struct npc_valithria_portalAI : public ScriptedAI
     void UpdateAI(uint32 /*diff*/) override { }
 };
 
-struct npc_valithria_cloudAI : public ScriptedAI
+struct npc_valithria_portal_preeffectAI : public ScriptedAI
 {
-    npc_valithria_cloudAI(Creature* creature) : ScriptedAI(creature)
+    npc_valithria_portal_preeffectAI(Creature* creature) : ScriptedAI(creature)
     {
         m_instance = static_cast<instance_icecrown_citadel*>(creature->GetInstanceData());
         SetReactState(REACT_PASSIVE);
@@ -924,13 +1061,20 @@ struct npc_valithria_cloudAI : public ScriptedAI
     }
 
     instance_icecrown_citadel* m_instance;
-    uint32 m_playerCheckTimer;
-    bool m_consumed;
-
+    uint32 m_portalTimer;
     void Reset() override
     {
-        m_playerCheckTimer = 750;
-        m_consumed = false;
+        m_portalTimer = 15000;
+        m_creature->ForcedDespawn(21000);
+
+        // Trinity/AzerothCore apply this precursor aura as soon as the actor
+        // is summoned. Do it explicitly here as well instead of relying only
+        // on creature_template_addon being applied to a temporary summon.
+        // The actor remains for the retail 15-second warning period before it
+        // is replaced by the six-second spell-click portal below.
+        uint32 visualSpell = m_creature->GetEntry() == NPC_NIGHTMARE_PORTAL_PRE_EFFECT ?
+            SPELL_NIGHTMARE_PORTAL_VISUAL_PRE : SPELL_DREAM_PORTAL_VISUAL_PRE;
+        m_creature->CastSpell(m_creature, visualSpell, TRIGGERED_OLD_TRIGGERED);
     }
 
     void AttackStart(Unit* /*who*/) override { }
@@ -938,8 +1082,124 @@ struct npc_valithria_cloudAI : public ScriptedAI
 
     void UpdateAI(uint32 diff) override
     {
-        if (m_consumed || !m_instance || m_instance->GetData(TYPE_VALITHRIA) != IN_PROGRESS)
+        if (!m_portalTimer)
             return;
+
+        if (m_portalTimer > diff)
+        {
+            m_portalTimer -= diff;
+            return;
+        }
+
+        uint32 portalEntry = m_creature->GetEntry() == NPC_NIGHTMARE_PORTAL_PRE_EFFECT ?
+            NPC_NIGHTMARE_PORTAL : NPC_DREAM_PORTAL;
+        Creature* owner = m_creature;
+        if (m_instance)
+            if (Creature* valithria = m_instance->GetSingleCreatureFromStorage(NPC_VALITHRIA))
+                owner = valithria;
+
+        Creature* portal = owner->SummonCreature(portalEntry,
+            m_creature->GetPositionX(), m_creature->GetPositionY(),
+            m_creature->GetPositionZ(), m_creature->GetOrientation(),
+            TEMPSPAWN_TIMED_DESPAWN, 6000);
+
+        if (portal)
+        {
+            portal->SetPhaseMask(1, true);
+            portal->AI()->SetReactState(REACT_PASSIVE);
+            portal->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_SPELLCLICK);
+            uint32 visualSpell = portalEntry == NPC_NIGHTMARE_PORTAL ?
+                SPELL_NIGHTMARE_PORTAL_VISUAL : SPELL_DREAM_PORTAL_VISUAL;
+            portal->CastSpell(portal, visualSpell, TRIGGERED_OLD_TRIGGERED);
+        }
+
+        m_creature->RemoveAurasDueToSpell(SPELL_DREAM_PORTAL_VISUAL_PRE);
+        m_creature->RemoveAurasDueToSpell(SPELL_NIGHTMARE_PORTAL_VISUAL_PRE);
+        m_creature->ForcedDespawn(250);
+        m_portalTimer = 0;
+    }
+};
+
+struct npc_valithria_cloudAI : public ScriptedAI
+{
+    npc_valithria_cloudAI(Creature* creature) : ScriptedAI(creature)
+    {
+        m_instance = static_cast<instance_icecrown_citadel*>(creature->GetInstanceData());
+        m_homeX = creature->GetPositionX();
+        m_homeY = creature->GetPositionY();
+        m_homeZ = creature->GetPositionZ();
+        SetReactState(REACT_PASSIVE);
+        SetCombatMovement(false);
+        Reset();
+    }
+
+    instance_icecrown_citadel* m_instance;
+    uint32 m_playerCheckTimer;
+    uint32 m_rearmTimer;
+    bool m_consumed;
+    float m_homeX;
+    float m_homeY;
+    float m_homeZ;
+
+    void Reset() override
+    {
+        m_playerCheckTimer = 750;
+        m_rearmTimer = 0;
+        m_consumed = false;
+
+        // Dream clouds are airborne actors.  CMaNGOS otherwise projects a
+        // temporary summon onto the floor when its template cannot inhabit
+        // air, which produced the ground-level ring seen during testing.  The
+        // paired world update fixes the template and these flags make the
+        // runtime state explicit for existing instances.  Retail clouds roam
+        // around their recorded high-altitude spawn points rather than
+        // remaining in a perfectly static circle.
+        m_creature->SetLevitate(true);
+        m_creature->SetAnimTier(AnimTier::Hover);
+        m_creature->SetWalk(false);
+        m_creature->GetMotionMaster()->MoveRandomAroundPoint(
+            m_homeX, m_homeY, m_homeZ, 10.0f, 5.0f, 0, false);
+
+        // These are phase-only trigger creatures: the green/red cloud the
+        // client sees comes from their addon aura, not from the creature
+        // model itself. Trinity and AzerothCore explicitly reload that addon
+        // every time a persistent cloud respawns. CMaNGOS can construct the
+        // scripted AI after the one-shot addon load, which leaves a valid but
+        // completely invisible trigger in the Dream. Reapply the native DBC
+        // visuals here (idempotently) so initial grid load and every 30-second
+        // DB respawn behave the same way on all four raid difficulties.
+        if (m_creature->GetEntry() == NPC_NIGHTMARE_CLOUD)
+        {
+            if (!m_creature->HasAura(SPELL_NIGHTMARE_CLOUD_VISUAL))
+                m_creature->CastSpell(m_creature, SPELL_NIGHTMARE_CLOUD_VISUAL, TRIGGERED_OLD_TRIGGERED);
+            if (!m_creature->HasAura(SPELL_NIGHTMARE_CLOUD))
+                m_creature->CastSpell(m_creature, SPELL_NIGHTMARE_CLOUD, TRIGGERED_OLD_TRIGGERED);
+        }
+        else if (!m_creature->HasAura(SPELL_DREAM_CLOUD_VISUAL))
+            m_creature->CastSpell(m_creature, SPELL_DREAM_CLOUD_VISUAL, TRIGGERED_OLD_TRIGGERED);
+    }
+
+    void AttackStart(Unit* /*who*/) override { }
+    void MoveInLineOfSight(Unit* /*who*/) override { }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!m_instance || m_instance->GetData(TYPE_VALITHRIA) != IN_PROGRESS)
+            return;
+
+        if (m_consumed)
+        {
+            if (m_rearmTimer > diff)
+            {
+                m_rearmTimer -= diff;
+                return;
+            }
+
+            // Retail clouds replenish after roughly 30 seconds. Reusing the
+            // bounded encounter actor avoids summon churn and stale GUIDs.
+            Reset();
+            return;
+        }
 
         if (m_playerCheckTimer > diff)
         {
@@ -957,10 +1217,51 @@ struct npc_valithria_cloudAI : public ScriptedAI
                 continue;
 
             m_consumed = true;
-            player->CastSpell(player, SPELL_EMERALD_VIGOR, TRIGGERED_OLD_TRIGGERED);
-            if (m_creature->GetEntry() == NPC_NIGHTMARE_CLOUD)
-                m_creature->CastSpell(player, SPELL_TWISTED_NIGHTMARES, TRIGGERED_OLD_TRIGGERED);
-            m_creature->ForcedDespawn(1000);
+            m_rearmTimer = 30000;
+
+            uint32 const vigorSpell = m_creature->GetEntry() == NPC_NIGHTMARE_CLOUD ?
+                SPELL_TWISTED_NIGHTMARES : SPELL_EMERALD_VIGOR;
+
+            // 70873/71941 select an enemy area around the spell source in the
+            // client DBC.  AzerothCore's target selector still includes the
+            // colliding healer when Valithria is supplied as original caster;
+            // CMaNGOS correctly evaluates hostility against that original
+            // caster and therefore selects no player at all.  Collision has
+            // already identified the exact player here, so instantiate the
+            // unmodified DBC aura on that player through CMaNGOS's native aura
+            // path.  Valithria remains the common caster, which is required for
+            // successive clouds to increment one Emerald Vigor stack.
+            SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(vigorSpell);
+            Creature* valithria = m_instance->GetSingleCreatureFromStorage(NPC_VALITHRIA);
+            if (spellInfo && valithria)
+            {
+                SpellAuraHolder* holder = CreateSpellAuraHolder(spellInfo, player, valithria);
+                for (uint32 effectIndex = 0; effectIndex < MAX_EFFECT_INDEX; ++effectIndex)
+                {
+                    uint8 effect = spellInfo->Effect[effectIndex];
+                    if (effect >= MAX_SPELL_EFFECTS)
+                        continue;
+
+                    if (IsAreaAuraEffect(effect) || effect == SPELL_EFFECT_APPLY_AURA ||
+                        effect == SPELL_EFFECT_PERSISTENT_AREA_AURA)
+                    {
+                        SpellEffectIndex const index = SpellEffectIndex(effectIndex);
+                        int32 basePoints = spellInfo->CalculateSimpleValue(index);
+                        int32 amount = basePoints;
+                        Aura* aura = CreateAura(spellInfo, index, &amount, &basePoints,
+                            holder, player, valithria);
+                        holder->AddAura(aura, index);
+                    }
+                }
+
+                if (!player->AddSpellAuraHolder(holder))
+                    delete holder;
+                else
+                    holder->SetState(SPELLAURAHOLDER_STATE_READY);
+            }
+            m_creature->RemoveAurasDueToSpell(SPELL_DREAM_CLOUD_VISUAL);
+            m_creature->RemoveAurasDueToSpell(SPELL_NIGHTMARE_CLOUD_VISUAL);
+            m_creature->RemoveAurasDueToSpell(SPELL_NIGHTMARE_CLOUD);
             return;
         }
     }
@@ -972,12 +1273,16 @@ bool NpcSpellClick_npc_valithria_portal(Player* player, Creature* portal, uint32
     if (!instance || instance->GetData(TYPE_VALITHRIA) != IN_PROGRESS || !player->IsAlive())
         return true;
 
-    player->CastSpell(player, SPELL_DREAM_STATE, TRIGGERED_OLD_TRIGGERED);
     if (Creature* valithria = instance->GetSingleCreatureFromStorage(NPC_VALITHRIA))
         if (boss_valithria_dreamwalkerAI* ai = dynamic_cast<boss_valithria_dreamwalkerAI*>(valithria->AI()))
             ai->PortalUsed();
-    portal->ForcedDespawn();
-    return true;
+
+    // Let the normal npc_spellclick_spells path cast Dream State.  This keeps
+    // click targeting/cast flags identical to other vehicle and portal spell
+    // clicks instead of duplicating the spell here.  Keep the portal alive
+    // through that cast, then remove the one-use actor.
+    portal->ForcedDespawn(250);
+    return false;
 }
 
 UnitAI* GetAI_boss_valithria_dreamwalker(Creature* creature) { return new boss_valithria_dreamwalkerAI(creature); }
@@ -990,6 +1295,7 @@ UnitAI* GetAI_npc_valithria_rot_worm(Creature* creature) { return new npc_valith
 UnitAI* GetAI_npc_valithria_column_of_frost(Creature* creature) { return new npc_valithria_column_of_frostAI(creature); }
 UnitAI* GetAI_npc_valithria_mana_void(Creature* creature) { return new npc_valithria_mana_voidAI(creature); }
 UnitAI* GetAI_npc_valithria_portal(Creature* creature) { return new npc_valithria_portalAI(creature); }
+UnitAI* GetAI_npc_valithria_portal_preeffect(Creature* creature) { return new npc_valithria_portal_preeffectAI(creature); }
 UnitAI* GetAI_npc_valithria_cloud(Creature* creature) { return new npc_valithria_cloudAI(creature); }
 
 void AddSC_boss_valithria_dreamwalker()
@@ -1043,6 +1349,11 @@ void AddSC_boss_valithria_dreamwalker()
     script->Name = "npc_valithria_portal";
     script->GetAI = &GetAI_npc_valithria_portal;
     script->pNpcSpellClick = &NpcSpellClick_npc_valithria_portal;
+    script->RegisterSelf();
+
+    script = new Script;
+    script->Name = "npc_valithria_portal_preeffect";
+    script->GetAI = &GetAI_npc_valithria_portal_preeffect;
     script->RegisterSelf();
 
     script = new Script;

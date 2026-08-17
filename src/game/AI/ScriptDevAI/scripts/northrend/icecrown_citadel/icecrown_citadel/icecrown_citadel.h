@@ -28,6 +28,15 @@ enum
     TYPE_PLAGUE_WING_ENTRANCE       = 14,
     TYPE_SPIRE_FROSTWYRM            = 15,
 
+    // Non-boss progression state. Kept outside the encounter array so the
+    // alternating Upper Spire frost jets do not count as a raid encounter.
+    DATA_COLDFLAME_JETS             = 100,
+    DATA_SINDRAGOSA_GAUNTLET        = 101,
+
+    // Native spawn group used to recover Valithria's four static starter
+    // archmages after a wipe or a world-server restart.
+    SPAWN_GROUP_VALITHRIA_STARTERS  = 6310000,
+
     // main boss entries
     NPC_LORD_MARROWGAR              = 36612,
     NPC_LADY_DEATHWHISPER           = 36855,
@@ -40,6 +49,7 @@ enum
     NPC_KELESETH                    = 37972,
     NPC_QUEEN_LANATHEL              = 37955,
     NPC_VALITHRIA                   = 36789,
+    NPC_THE_LICH_KING_VALITHRIA     = 38153,       // hidden controller which creates Valithria's reward cache
     NPC_SINDRAGOSA                  = 36853,
     NPC_LICH_KING                   = 36597,
 
@@ -80,6 +90,8 @@ enum
     NPC_KORKRON_REAVER              = 36957,
     NPC_KORKRON_SERGEANT            = 36960,
 
+    ITEM_GOBLIN_ROCKET_PACK         = 49278,
+
     NPC_OVERLORD_SAURFANG           = 37187,        // Saurfang intro / outro
     NPC_KORKRON_REAVER_RISE         = 37920,
     NPC_MURADIN_BRONZEBEARD         = 37200,
@@ -109,6 +121,12 @@ enum
     NPC_SPINESTALKER                = 37534,
     NPC_FROSTWARDEN_HANDLER         = 37531,
     NPC_FROSTWING_WHELP             = 37532,
+    NPC_SINDRAGOSA_GAUNTLET         = 37503,
+    NPC_NERUBAR_CHAMPION            = 37501,
+    NPC_NERUBAR_WEBWEAVER           = 37502,
+    NPC_NERUBAR_BROODLING           = 37232,
+    NPC_FROSTWARDEN_SORCERESS       = 37229,
+    NPC_FROSTWARDEN_WARRIOR         = 37228,
     NPC_OOZE_TENTACLE_STALKER       = 38308,        // accessories to Putricide
     NPC_SLIMY_TENTACLE_STALKER      = 38309,
 
@@ -212,15 +230,15 @@ enum
     GO_SAURFANG_CACHE_10_H          = 202238,
     GO_SAURFANG_CACHE_25_H          = 202241,
 
-    GO_GUNSHIP_ARMORY_A             = 201872,
-    GO_GUNSHIP_ARMORY_A_25          = 201873,
-    GO_GUNSHIP_ARMORY_A_10H         = 201874,
+    GO_GUNSHIP_ARMORY_A             = 201873,
+    GO_GUNSHIP_ARMORY_A_25          = 201874,
+    GO_GUNSHIP_ARMORY_A_10H         = 201872,
     GO_GUNSHIP_ARMORY_A_25H         = 201875,
 
-    GO_GUNSHIP_ARMORY_H             = 202177,
-    GO_GUNSHIP_ARMORY_H_25          = 202178,
-    GO_GUNSHIP_ARMORY_H_10H         = 202179,
-    GO_GUNSHIP_ARMORY_H_25H         = 202180,
+    GO_GUNSHIP_ARMORY_H             = 202178,
+    GO_GUNSHIP_ARMORY_H_25          = 202180,
+    GO_GUNSHIP_ARMORY_H_10H         = 202177,
+    GO_GUNSHIP_ARMORY_H_25H         = 202179,
 
     GO_DREAMWALKER_CACHE            = 201959,
     GO_DREAMWALKER_CACHE_25         = 202339,
@@ -238,11 +256,16 @@ enum
 
     // Area triggers
     AT_SINDRAGOSA_PLATFORM          = 5604,
+    AT_SINDRAGOSA_GAUNTLET          = 5623,
     AT_LIGHTS_HAMMER_INTRO_1        = 5611,
     AT_LIGHTS_HAMMER_INTRO_2        = 5612,
     AT_RAMPART_ALLIANCE             = 5628,
+    AT_RAMPART_ALLIANCE_2           = 5629,
     AT_RAMPART_HORDE                = 5630,
+    AT_RAMPART_HORDE_2              = 5631,
     AT_PUTRICIDES_TRAP              = 5647,
+    AT_SHUTDOWN_FROST_JETS          = 5649,
+    AT_SAURFANG_PORTAL              = 5698,
     AT_DEATHWHISPER_INTRO           = 5709,
     AT_FROZEN_THRONE_TELE           = 5718,
     AT_MARROWGAR_INTRO              = 5732,
@@ -349,6 +372,7 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         bool IsEncounterInProgress() const override;
 
         void OnPlayerEnter(Player* pPlayer) override;
+        void OnPlayerLeave(Player* pPlayer) override;
         void OnCreatureCreate(Creature* pCreature) override;
         void OnObjectCreate(GameObject* pGo) override;
         void OnCreatureRespawn(Creature* pCreature) override;
@@ -384,6 +408,8 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         // Frostwing whelps are split between the two frostwyrms. Each dragon
         // lands only after its own trash group has been cleared.
         void StartSindragosaFrostwyrm(uint32 entry, Player* player = nullptr);
+
+        void RespawnValithriaStarterPack();
         void OpenSindragosaShortcut();
 
         void SetSpecialAchievementCriteria(uint32 uiType, bool bIsMet);
@@ -408,6 +434,9 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         uint32 m_uiTeam;                                    // Team of first entered player, used on the Gunship event
         uint32 m_uiPutricideValveTimer;
         uint32 m_uiGunshipResetTimer;
+        uint32 m_uiGunshipVictoryTeleportTimer;
+        uint32 m_uiColdflameJetsState;
+        uint32 m_uiSindragosaGauntletState;
         uint8 m_uiLightsHammerDamnedKills;
 
         bool m_bHasMarrowgarIntroYelled;

@@ -17,7 +17,7 @@
 /* ScriptData
 SDName: boss_professor_putricide
 SD%Complete: 90%
-SDComment: Heroic spells require more research and probably core fix
+SDComment: Native phase flow, heroic variables, Unbound Plague and Mutated Plague implemented.
 SDCategory: Icecrown Citadel
 EndScriptData */
 
@@ -159,6 +159,7 @@ struct boss_professor_putricideAI : public ScriptedAI
     uint32 m_uiPuddleTimer;
     uint32 m_uiUnstableExperimentTimer;
     uint32 m_uiUnboundPlagueTimer;
+    uint32 m_uiMutatedPlagueTimer;
     uint32 m_uiChokingGasBombTimer;
     uint32 m_uiMalleableGooTimer;
 
@@ -171,6 +172,7 @@ struct boss_professor_putricideAI : public ScriptedAI
         m_uiPuddleTimer             = 10000;
         m_uiUnstableExperimentTimer = 30000;
         m_uiUnboundPlagueTimer      = 10000;
+        m_uiMutatedPlagueTimer      = 10000;
         m_uiChokingGasBombTimer     = 35000;
         m_uiMalleableGooTimer       = 25000;
 
@@ -180,7 +182,85 @@ struct boss_professor_putricideAI : public ScriptedAI
             if (m_pInstance->GetData(TYPE_ROTFACE) != DONE || m_pInstance->GetData(TYPE_FESTERGUT) != DONE)
                 m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE | UNIT_FLAG_IMMUNE_TO_PLAYER);
             else
+            {
                 m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE | UNIT_FLAG_IMMUNE_TO_PLAYER);
+                // Once both observation encounters are complete Putricide is
+                // back at his laboratory home position.  Discard any stale
+                // balcony point movement so the client does not render him
+                // running in place while idle at the table.
+                m_creature->StopMoving();
+                m_creature->GetMotionMaster()->Clear(false, true);
+                m_creature->GetMotionMaster()->MoveIdle();
+            }
+        }
+
+        CleanupEncounterAuras();
+    }
+
+    void CleanupEncounterAuras()
+    {
+        for (auto& playerRef : m_creature->GetMap()->GetPlayers())
+        {
+            if (Player* player = playerRef.getSource())
+            {
+                player->RemoveAurasDueToSpell(SPELL_UNBOUND_PLAGUE);
+                player->RemoveAurasDueToSpell(SPELL_MUTATED_PLAGUE);
+                player->RemoveAurasDueToSpell(SPELL_OOZE_VARIABLE_OOZE);
+                player->RemoveAurasDueToSpell(SPELL_GAS_VARIABLE_GAS);
+            }
+        }
+
+        // Native encounter cleanup removes the player's abomination vehicle
+        // and the two laboratory tentacle visuals.  These must run on victory
+        // as well as evade or they can keep the room in combat after death.
+        m_creature->CastSpell(m_creature, SPELL_CLEANSE_MUTATION, TRIGGERED_OLD_TRIGGERED);
+        if (m_pInstance)
+        {
+            if (Creature* tentacle = m_pInstance->GetSingleCreatureFromStorage(NPC_OOZE_TENTACLE_STALKER))
+                tentacle->RemoveAllAurasOnEvade();
+            if (Creature* tentacle = m_pInstance->GetSingleCreatureFromStorage(NPC_SLIMY_TENTACLE_STALKER))
+                tentacle->RemoveAllAurasOnEvade();
+        }
+    }
+
+    void CleanupEncounterSummons()
+    {
+        uint32 const entries[] =
+        {
+            NPC_GROWING_OOZE_PUDDLE_TRIGGER, NPC_GROWING_OOZE_PUDDLE,
+            NPC_GAS_CLOUD, NPC_VOLATILE_OOZE, NPC_CHOKING_GAS_BOMB
+        };
+
+        for (uint32 entry : entries)
+        {
+            CreatureList summons;
+            GetCreatureListWithEntryInGrid(summons, m_creature, entry, 150.0f);
+            for (Creature* summon : summons)
+                if (summon->IsTemporarySummon())
+                    summon->ForcedDespawn();
+        }
+    }
+
+    void ApplyHeroicVariables()
+    {
+        if (!m_pInstance || !m_pInstance->IsHeroicDifficulty() || !m_pInstance->Is25ManDifficulty())
+            return;
+
+        std::vector<Player*> targets;
+        for (auto& playerRef : m_creature->GetMap()->GetPlayers())
+            if (Player* player = playerRef.getSource())
+                if (player->IsAlive() && !player->IsGameMaster() && m_creature->IsWithinDistInMap(player, 120.0f))
+                    targets.push_back(player);
+
+        bool oozeVariable = urand(0, 1) != 0;
+        while (!targets.empty())
+        {
+            size_t index = urand(0, targets.size() - 1);
+            Player* player = targets[index];
+            player->CastSpell(player, oozeVariable ? SPELL_OOZE_VARIABLE_OOZE : SPELL_GAS_VARIABLE_GAS,
+                TRIGGERED_OLD_TRIGGERED);
+            oozeVariable = !oozeVariable;
+            targets.erase(targets.begin() + index);
         }
     }
 
@@ -207,19 +287,17 @@ struct boss_professor_putricideAI : public ScriptedAI
             m_pInstance->SetData(TYPE_PROFESSOR_PUTRICIDE, DONE);
 
         DoScriptText(SAY_DEATH, m_creature);
+        CleanupEncounterAuras();
+        CleanupEncounterSummons();
     }
 
     void JustReachedHome() override
     {
         if (m_pInstance)
-        {
             m_pInstance->SetData(TYPE_PROFESSOR_PUTRICIDE, FAIL);
 
-            if (Creature* pTentacle = m_pInstance->GetSingleCreatureFromStorage(NPC_OOZE_TENTACLE_STALKER))
-                pTentacle->RemoveAllAurasOnEvade();
-            if (Creature* pTentacle = m_pInstance->GetSingleCreatureFromStorage(NPC_SLIMY_TENTACLE_STALKER))
-                pTentacle->RemoveAllAurasOnEvade();
-        }
+        CleanupEncounterAuras();
+        CleanupEncounterSummons();
     }
 
     void AttackStart(Unit* pWho) override
@@ -247,6 +325,7 @@ struct boss_professor_putricideAI : public ScriptedAI
             if (m_pInstance->IsHeroicDifficulty())
             {
                 DoScriptText(SAY_PHASE_CHANGE, m_creature);
+                ApplyHeroicVariables();
                 m_uiTransitionTimer = 30000;
             }
             else
@@ -362,7 +441,16 @@ struct boss_professor_putricideAI : public ScriptedAI
                     m_uiMalleableGooTimer -= uiDiff;
 
                 if (m_uiPhase == PHASE_THREE)
+                {
+                    if (m_uiMutatedPlagueTimer <= uiDiff)
+                    {
+                        if (DoCastSpellIfCan(m_creature->GetVictim(), SPELL_MUTATED_PLAGUE) == CAST_OK)
+                            m_uiMutatedPlagueTimer = 10000;
+                    }
+                    else
+                        m_uiMutatedPlagueTimer -= uiDiff;
                     break;
+                }
                 // else no break;
             }
             case PHASE_ONE:
@@ -446,8 +534,24 @@ struct boss_professor_putricideAI : public ScriptedAI
                     // in heroic it changes form at the end of the transition
                     if (!m_pInstance->IsHeroicDifficulty())
                         DoCastSpellIfCan(m_creature, SPELL_TEAR_GAS_CANCEL, CAST_TRIGGERED);
+                    else
+                    {
+                        for (auto& playerRef : m_creature->GetMap()->GetPlayers())
+                        {
+                            if (Player* player = playerRef.getSource())
+                            {
+                                player->RemoveAurasDueToSpell(SPELL_OOZE_VARIABLE_OOZE);
+                                player->RemoveAurasDueToSpell(SPELL_GAS_VARIABLE_GAS);
+                            }
+                        }
+                    }
 
                     m_uiPhase = (m_uiPhase == PHASE_TRANSITION_ONE ? PHASE_TWO : PHASE_THREE);
+                    if (m_uiPhase == PHASE_THREE && m_pInstance)
+                    {
+                        m_creature->CastSpell(m_creature, SPELL_CLEANSE_MUTATION, TRIGGERED_OLD_TRIGGERED);
+                        m_pInstance->DoToggleGameObjectFlags(GO_DRINK_ME, GO_FLAG_NO_INTERACT, true);
+                    }
                     m_uiTransitionTimer = 0;
                 }
                 else
@@ -517,19 +621,26 @@ struct OozeFloodTrigger : public SpellScript
         if (!pTarget)
             return;
 
-        // get the nearest twin tap stalker
+        // Get the nearest twin tap stalker.  The old loop simply kept the
+        // last stalker returned by the grid visitor, which could pair taps
+        // from unrelated flood lanes.
         Creature* pNearTarget = nullptr;
+        float fNearDistance = 30.0f;
         CreatureList lTargetsInRange;
         GetCreatureListWithEntryInGrid(lTargetsInRange, pTarget, pTarget->GetEntry(), 30.0f);
 
         if (lTargetsInRange.empty())
             return;
 
-        // find only the nearest tap trigger
+        // Find only the nearest *other* upper tap trigger.
         for (CreatureList::const_iterator itr = lTargetsInRange.begin(); itr != lTargetsInRange.end(); ++itr)
         {
-            if ((*itr)->GetPositionZ() > 370.0f)
+            float fDistance = pTarget->GetDistance(*itr);
+            if (*itr != pTarget && (*itr)->GetPositionZ() > 370.0f && fDistance < fNearDistance)
+            {
                 pNearTarget = *itr;
+                fNearDistance = fDistance;
+            }
         }
 
         if (!pNearTarget)
@@ -773,9 +884,27 @@ struct OozeFlood : public SpellScript
     void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
     {
         Unit* target = spell->GetUnitTarget();
-        // Set target manually to hit exactly the stalker below the tap
-        if (Creature* pStalker = GetClosestCreatureWithEntry(target, target->GetEntry(), 20.0f))
-            target->CastSpell(pStalker, spell->m_spellInfo->CalculateSimpleValue(effIdx), TRIGGERED_OLD_TRIGGERED);
+
+        // Set the target manually to the closest stalker on the room floor.
+        // A generic closest-entry lookup can select another upper tap and
+        // render the ooze flood suspended in mid-air.
+        Creature* pFloorStalker = nullptr;
+        float fNearDistance = 20.0f;
+        CreatureList lTargetsInRange;
+        GetCreatureListWithEntryInGrid(lTargetsInRange, target, target->GetEntry(), 20.0f);
+
+        for (CreatureList::const_iterator itr = lTargetsInRange.begin(); itr != lTargetsInRange.end(); ++itr)
+        {
+            float fDistance = target->GetDistance(*itr);
+            if ((*itr)->GetPositionZ() < 365.0f && fDistance < fNearDistance)
+            {
+                pFloorStalker = *itr;
+                fNearDistance = fDistance;
+            }
+        }
+
+        if (pFloorStalker)
+            target->CastSpell(pFloorStalker, spell->m_spellInfo->CalculateSimpleValue(effIdx), TRIGGERED_OLD_TRIGGERED);
     }
 };
 

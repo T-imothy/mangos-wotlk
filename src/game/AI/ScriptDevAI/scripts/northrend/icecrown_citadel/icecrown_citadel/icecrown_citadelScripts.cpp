@@ -25,6 +25,7 @@ EndScriptData */
 #include "icecrown_citadel.h"
 #include "AI/BaseAI/GameObjectAI.h"
 #include "AI/ScriptDevAI/base/TimerAI.h"
+#include "Entities/Transports.h"
 
 /*#####
 ## go_icc_teleporter
@@ -234,8 +235,184 @@ bool AreaTrigger_at_lights_hammer(Player* pPlayer, AreaTriggerEntry const* pAt)
 ## at_rampart_skull
 #####*/
 
-static const float aFrostwyrmAllySpawnLocs[3] = { -326.5525f, 2236.194f, 328.9574f };
-static const float aFrostwyrmHordeSpawnLocs[3] = { -317.854f ,2190.76f ,328.711f };
+enum SpireFrostwyrmActions
+{
+    SPELL_SPIRE_CLEAVE                 = 70361,
+    SPELL_SPIRE_FROST_BREATH_10        = 70116,
+    SPELL_SPIRE_FROST_BREATH_25        = 72641,
+    SPELL_SPIRE_BLIZZARD_10            = 70362,
+    SPELL_SPIRE_BLIZZARD_25            = 71118,
+    SPELL_SPIRE_ENRAGE                 = 47008,
+
+    BROADCAST_SPIRE_FROSTWYRM          = 37161,
+
+    POINT_SPIRE_FROSTWYRM_APPROACH     = 1,
+    POINT_SPIRE_FROSTWYRM_LAND         = 2,
+};
+
+// The old CMaNGOS implementation spawned these wyrms at the first point of
+// an eight-node DB waypoint path.  A temporary summon could lose that path on
+// unload/reset, leaving only the warning text visible.  Use the verified
+// airborne spawn and landing positions used by the mature ICC implementation,
+// while retaining separate retail routes for the Alliance and Horde sides.
+static const Position aFrostwyrmAllySpawnLoc = Position(-361.154358f, 2305.821289f, 244.771713f, 2.704335f);
+static const Position aFrostwyrmHordeSpawnLoc = Position(-375.538879f, 2120.774658f, 242.256775f, 3.714352f);
+static const Position aFrostwyrmAllyApproachLoc = Position(-423.2222f, 2341.465f, 202.5808f, 2.543328f);
+static const Position aFrostwyrmHordeApproachLoc = Position(-437.643f, 2078.05f, 197.009f, 3.825093f);
+static const Position aFrostwyrmAllyLandingLoc = Position(-433.589508f, 2344.564697f, 191.253616f, 2.543328f);
+static const Position aFrostwyrmHordeLandingLoc = Position(-433.667084f, 2080.347412f, 191.253860f, 3.825093f);
+
+struct npc_spire_frostwyrm_iccAI : public ScriptedAI
+{
+    npc_spire_frostwyrm_iccAI(Creature* creature) : ScriptedAI(creature),
+        m_pInstance(static_cast<instance_icecrown_citadel*>(creature->GetInstanceData())),
+        m_bLanding(false), m_bHordeSide(false)
+    {
+        Reset();
+    }
+
+    instance_icecrown_citadel* m_pInstance;
+    uint32 m_uiCleaveTimer;
+    uint32 m_uiFrostBreathTimer;
+    uint32 m_uiBlizzardTimer;
+    bool m_bEnraged;
+    bool m_bLanding;
+    bool m_bHordeSide;
+
+    void Reset() override
+    {
+        if (m_bLanding)
+            return;
+
+        m_uiCleaveTimer = urand(5000, 7000);
+        m_uiFrostBreathTimer = urand(20000, 25000);
+        m_uiBlizzardTimer = urand(15000, 20000);
+        m_bEnraged = false;
+
+        // Entry 37230 also has one faction-filtered static spawn per route.
+        // Preserve its DB flying presentation; only normalize a temporary
+        // arrival summon after it has reached the validated ground height.
+        if (!m_bLanding && m_creature->IsTemporarySummon() && m_creature->GetPositionZ() < 200.0f)
+        {
+            SetCombatMovement(true);
+            m_creature->SetCanEnterCombat(true);
+            m_creature->SetAnimTier(AnimTier::Ground);
+            m_creature->SetLevitate(false);
+            m_creature->SetWalk(false);
+            m_creature->SetActiveObjectState(false);
+            m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER | UNIT_FLAG_IMMUNE_TO_NPC);
+        }
+    }
+
+    void EnterEvadeMode() override
+    {
+        // The arrival spline is non-combat movement. Do not let the generic
+        // evade path clear it merely because the summon has no victim yet.
+        if (m_bLanding)
+            return;
+
+        ScriptedAI::EnterEvadeMode();
+    }
+
+    void ReceiveAIEvent(AIEventType eventType, Unit* /*sender*/, Unit* /*invoker*/, uint32 miscValue) override
+    {
+        if (eventType != AI_EVENT_CUSTOM_A || m_bLanding)
+            return;
+
+        m_bHordeSide = miscValue == AT_RAMPART_HORDE || miscValue == AT_RAMPART_HORDE_2;
+        m_bLanding = true;
+        SetCombatMovement(false);
+        m_creature->SetCanEnterCombat(false);
+        m_creature->SetActiveObjectState(true);
+        m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER | UNIT_FLAG_IMMUNE_TO_NPC);
+        m_creature->SetAnimTier(AnimTier::Fly);
+        m_creature->SetLevitate(true);
+        m_creature->SetWalk(false);
+
+        Position const& landing = m_bHordeSide ? aFrostwyrmHordeLandingLoc : aFrostwyrmAllyLandingLoc;
+        Position const& approach = m_bHordeSide ? aFrostwyrmHordeApproachLoc : aFrostwyrmAllyApproachLoc;
+        m_creature->SetRespawnCoord(landing.x, landing.y, landing.z, landing.o);
+        m_creature->GetMotionMaster()->Clear();
+        m_creature->GetMotionMaster()->MovePoint(POINT_SPIRE_FROSTWYRM_APPROACH, approach,
+            FORCED_MOVEMENT_FLIGHT, 18.0f, false);
+        DoBroadcastText(BROADCAST_SPIRE_FROSTWYRM, m_creature);
+    }
+
+    void MovementInform(uint32 movementType, uint32 pointId) override
+    {
+        if (movementType != POINT_MOTION_TYPE || !m_bLanding)
+            return;
+
+        Position const& landing = m_bHordeSide ? aFrostwyrmHordeLandingLoc : aFrostwyrmAllyLandingLoc;
+        if (pointId == POINT_SPIRE_FROSTWYRM_APPROACH)
+        {
+            m_creature->GetMotionMaster()->MovePoint(POINT_SPIRE_FROSTWYRM_LAND, landing,
+                FORCED_MOVEMENT_FLIGHT, 8.5f, false, ObjectGuid(), 0, AnimTier::Fly);
+        }
+        else if (pointId == POINT_SPIRE_FROSTWYRM_LAND)
+        {
+            m_creature->GetMotionMaster()->MoveIdle();
+            m_creature->SetFacingTo(landing.o);
+            m_bLanding = false;
+            SetCombatMovement(true);
+            m_creature->SetAnimTier(AnimTier::Ground);
+            m_creature->SetLevitate(false);
+            m_creature->SetActiveObjectState(false);
+            m_creature->SetCanEnterCombat(true);
+            m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER | UNIT_FLAG_IMMUNE_TO_NPC);
+            m_creature->SetInCombatWithZone();
+            m_creature->AI()->AttackClosestEnemy();
+        }
+    }
+
+    void UpdateAI(const uint32 diff) override
+    {
+        if (m_bLanding || !m_creature->SelectHostileTarget() || !m_creature->GetVictim())
+            return;
+
+        if (!m_bEnraged && m_creature->GetHealthPercent() <= 10.0f)
+        {
+            if (DoCastSpellIfCan(m_creature, SPELL_SPIRE_ENRAGE) == CAST_OK)
+                m_bEnraged = true;
+        }
+
+        if (m_uiCleaveTimer <= diff)
+        {
+            if (DoCastSpellIfCan(m_creature->GetVictim(), SPELL_SPIRE_CLEAVE) == CAST_OK)
+                m_uiCleaveTimer = urand(5000, 7000);
+        }
+        else
+            m_uiCleaveTimer -= diff;
+
+        if (m_uiFrostBreathTimer <= diff)
+        {
+            uint32 spellId = m_pInstance && m_pInstance->Is25ManDifficulty() ? SPELL_SPIRE_FROST_BREATH_25 : SPELL_SPIRE_FROST_BREATH_10;
+            if (DoCastSpellIfCan(m_creature->GetVictim(), spellId) == CAST_OK)
+                m_uiFrostBreathTimer = urand(20000, 25000);
+        }
+        else
+            m_uiFrostBreathTimer -= diff;
+
+        if (m_uiBlizzardTimer <= diff)
+        {
+            uint32 spellId = m_pInstance && m_pInstance->Is25ManDifficulty() ? SPELL_SPIRE_BLIZZARD_25 : SPELL_SPIRE_BLIZZARD_10;
+            if (Unit* target = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 0, spellId, SELECT_FLAG_PLAYER))
+            {
+                if (DoCastSpellIfCan(target, spellId) == CAST_OK)
+                    m_uiBlizzardTimer = urand(15000, 20000);
+            }
+        }
+        else
+            m_uiBlizzardTimer -= diff;
+
+        DoMeleeAttackIfReady();
+    }
+};
+
+UnitAI* GetAI_npc_spire_frostwyrm_icc(Creature* creature)
+{
+    return new npc_spire_frostwyrm_iccAI(creature);
+}
 
 bool AreaTrigger_at_rampart_skull(Player* pPlayer, AreaTriggerEntry const* pAt)
 {
@@ -249,14 +426,31 @@ bool AreaTrigger_at_rampart_skull(Player* pPlayer, AreaTriggerEntry const* pAt)
     if (pInstance->GetData(TYPE_LADY_DEATHWHISPER) != DONE || pInstance->GetData(TYPE_SPIRE_FROSTWYRM) == DONE)
         return false;
 
-    if (pInstance->GetSingleCreatureFromStorage(NPC_SPIRE_FROSTWYRM))
-        return false;
+    if (Creature* frostwyrm = pInstance->GetSingleCreatureFromStorage(NPC_SPIRE_FROSTWYRM))
+    {
+        if (frostwyrm->IsAlive())
+            return false;
+    }
 
     // spawn a Spire Frostwyrm based on the team faction
-    if (pAt->id == AT_RAMPART_ALLIANCE && pInstance->GetPlayerTeam() == ALLIANCE)
-        pPlayer->SummonCreature(NPC_SPIRE_FROSTWYRM, aFrostwyrmAllySpawnLocs[0], aFrostwyrmAllySpawnLocs[1], aFrostwyrmAllySpawnLocs[2], 0, TEMPSPAWN_DEAD_DESPAWN, 0, true, true, 0);
-    else if (pAt->id == AT_RAMPART_HORDE && pInstance->GetPlayerTeam() == HORDE)
-        pPlayer->SummonCreature(NPC_SPIRE_FROSTWYRM, aFrostwyrmHordeSpawnLocs[0], aFrostwyrmHordeSpawnLocs[1], aFrostwyrmHordeSpawnLocs[2], 0, TEMPSPAWN_DEAD_DESPAWN, 0, true, true, 1);
+    Creature* frostwyrm = nullptr;
+    if ((pAt->id == AT_RAMPART_ALLIANCE || pAt->id == AT_RAMPART_ALLIANCE_2) &&
+            pInstance->GetPlayerTeam() == ALLIANCE)
+        frostwyrm = pPlayer->SummonCreature(NPC_SPIRE_FROSTWYRM, aFrostwyrmAllySpawnLoc.x, aFrostwyrmAllySpawnLoc.y,
+            aFrostwyrmAllySpawnLoc.z, aFrostwyrmAllySpawnLoc.o, TEMPSPAWN_DEAD_DESPAWN, 0, true, true);
+    else if ((pAt->id == AT_RAMPART_HORDE || pAt->id == AT_RAMPART_HORDE_2) &&
+            pInstance->GetPlayerTeam() == HORDE)
+        frostwyrm = pPlayer->SummonCreature(NPC_SPIRE_FROSTWYRM, aFrostwyrmHordeSpawnLoc.x, aFrostwyrmHordeSpawnLoc.y,
+            aFrostwyrmHordeSpawnLoc.z, aFrostwyrmHordeSpawnLoc.o, TEMPSPAWN_DEAD_DESPAWN, 0, true, true);
+
+    // Do not consume the instance event before a valid faction-side summon
+    // exists. A failed summon remains retriggerable instead of producing only
+    // the screech and then becoming stuck until a server restart.
+    if (frostwyrm)
+    {
+        pInstance->SetData(TYPE_SPIRE_FROSTWYRM, IN_PROGRESS);
+        frostwyrm->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, pPlayer, frostwyrm, pAt->id);
+    }
 
     return false;
 }
@@ -322,6 +516,15 @@ struct npc_putricides_trapAI : public ScriptedAI
     uint32 m_uiEventTimer;
     uint32 m_uiSummonTimer;
 
+    void StopSwarm()
+    {
+        // Spell 70475 owns the persistent swarm visual/effect.  Ending the
+        // event without removing its aura and dynamic objects leaves the
+        // apparent five-minute debuff running after the one-minute gauntlet.
+        m_creature->RemoveAurasDueToSpell(SPELL_GIANT_INSECT_SWARM);
+        m_creature->RemoveAllDynObjects();
+    }
+
     void Reset() override
     {
         m_uiInsectCounter = 0;
@@ -369,6 +572,7 @@ struct npc_putricides_trapAI : public ScriptedAI
                 m_uiSummonTimer = 0;
                 m_uiEventTimer = 0;
 
+                StopSwarm();
                 m_pInstance->SetData(TYPE_PLAGUE_WING_ENTRANCE, DONE);
                 m_creature->ForcedDespawn();
             }
@@ -425,6 +629,7 @@ struct npc_putricides_trapAI : public ScriptedAI
                 }
 
                 // set event as done if there are still players around
+                StopSwarm();
                 m_pInstance->SetData(TYPE_PLAGUE_WING_ENTRANCE, bEventFailed ? FAIL : DONE);
                 m_uiSummonTimer = 0;
                 m_uiEventTimer = 0;
@@ -444,6 +649,15 @@ struct LadyDeathwhisperElevator : public GameObjectAI, public TimerManager
 {
     LadyDeathwhisperElevator(GameObject* go) : GameObjectAI(go)
     {
+        // SetGoState() resumes an ElevatorTransport. Keep this lift at its
+        // initial stop until Deathwhisper's DONE transition explicitly starts
+        // it, matching the encounter progression gate used by the client.
+        if (InstanceData* instance = m_go->GetMap()->GetInstanceData())
+        {
+            if (instance->GetData(TYPE_LADY_DEATHWHISPER) != DONE)
+                static_cast<ElevatorTransport*>(m_go)->StopMovement();
+        }
+
         AddCustomAction(1, true, [&]()
         {
             HandleStateChange();
@@ -483,7 +697,10 @@ struct RocketPack : public AuraScript
     void OnApply(Aura* aura, bool apply) const override
     {
         if (apply)
-            aura->GetTarget()->CastSpell(nullptr, 68721, TRIGGERED_NONE);
+            // 68721 is the movement/damage aura triggered by the pack's
+            // on-use spell.  It is not a second player-initiated cast and
+            // must not repeat normal combat/casting-state validation.
+            aura->GetTarget()->CastSpell(nullptr, 68721, TRIGGERED_OLD_TRIGGERED);
     }
 };
 
@@ -496,6 +713,193 @@ struct RocketPackPeriodic : public AuraScript
             target->RemoveAurasDueToSpell(aura->GetId());
     }
 };
+
+// 70739, 70740 - Geist Alarm
+// The two trap gameobjects above the Plagueworks corridor call the same
+// retail event: a six-geist pipe pack is created, jumps down when the raid is
+// below it and immediately engages.  Keeping this on the alarm spells avoids
+// permanent duplicate creature spawns and lets the gameobject's normal
+// respawn control subsequent pulls.
+struct GeistAlarm : public SpellScript
+{
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        if (effIdx != EFFECT_INDEX_2)
+            return;
+
+        WorldObject* source = spell->GetCastingObject();
+        if (!source || !source->GetMap() || source->GetMapId() != 631)
+            return;
+
+        Player* target = nullptr;
+        float nearestDistance = 120.0f;
+        Map::PlayerList const& players = source->GetMap()->GetPlayers();
+        for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
+        {
+            Player* player = itr->getSource();
+            if (!player || !player->IsAlive() || player->IsGameMaster())
+                continue;
+
+            float distance = source->GetDistance(player);
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                target = player;
+            }
+        }
+
+        if (!target)
+            return;
+
+        static uint32 const NPC_VENGEFUL_FLESHREAPER = 37038;
+        static float const spawnX = 4356.77f;
+        static float const spawnY = 2971.90f;
+        static float const spawnZ = 360.52f;
+        bool jumpFromPipe = nearestDistance > 20.0f;
+
+        Creature* leader = source->SummonCreature(NPC_VENGEFUL_FLESHREAPER,
+            spawnX, spawnY, spawnZ, M_PI_F / 2.0f,
+            TEMPSPAWN_TIMED_OOC_OR_DEAD_DESPAWN, 30 * MINUTE * IN_MILLISECONDS);
+        if (!leader)
+            return;
+
+        leader->SetInCombatWith(target);
+        leader->AddThreat(target, 1.0f);
+        leader->AI()->AttackStart(target);
+        if (jumpFromPipe)
+            leader->GetMotionMaster()->MoveJump(spawnX, spawnY + 55.0f, spawnZ, 20.0f, 6.0f);
+
+        for (uint8 i = 0; i < 5; ++i)
+        {
+            float angle = frand(0.0f, 2.0f * M_PI_F);
+            float distance = frand(2.0f, 6.0f);
+            float x = spawnX + std::cos(angle) * distance;
+            float y = spawnY + std::sin(angle) * distance;
+
+            if (Creature* geist = leader->SummonCreature(NPC_VENGEFUL_FLESHREAPER,
+                    x, y, spawnZ, angle, TEMPSPAWN_TIMED_OOC_OR_DEAD_DESPAWN,
+                    30 * MINUTE * IN_MILLISECONDS))
+            {
+                geist->SetInCombatWith(target);
+                geist->AddThreat(target, 1.0f);
+                geist->AI()->AttackStart(target);
+                if (jumpFromPipe)
+                    geist->GetMotionMaster()->MoveJump(x, y + 55.0f, spawnZ, 20.0f, 6.0f);
+            }
+        }
+    }
+};
+
+/*#####
+## npc_icc_vengeful_fleshreaper
+#####*/
+
+enum VengefulFleshreaperActions
+{
+    SPELL_LEAPING_FACE_MAUL        = 71164,
+    SPELL_LEAPING_FACE_MAUL_AURA   = 71163,
+    POINT_PIPE_JUMP                = 3703801,
+};
+
+// The two permanent Fleshreapers above the Plagueworks corridor patrol on
+// pipes roughly twenty yards above the floor. Generic chase movement cannot
+// build a path from that transport-like geometry, so it evades and resumes
+// its waypoint route. Retail has the creature leap down to the detected
+// player first; this mirrors that transition while leaving ground spawns and
+// Geist Alarm summons on normal combat movement.
+struct npc_icc_vengeful_fleshreaperAI : public ScriptedAI
+{
+    npc_icc_vengeful_fleshreaperAI(Creature* creature) : ScriptedAI(creature)
+    {
+        m_bPipeSpawn = creature->GetRespawnPosition().z > 365.0f;
+        Reset();
+    }
+
+    bool m_bPipeSpawn;
+    bool m_bJumping;
+    ObjectGuid m_jumpTargetGuid;
+    uint32 m_uiFaceMaulTimer;
+
+    void Reset() override
+    {
+        m_bJumping = false;
+        m_jumpTargetGuid.Clear();
+        m_uiFaceMaulTimer = urand(3000, 6000);
+        m_creature->SetWalk(false);
+    }
+
+    void MoveInLineOfSight(Unit* who) override
+    {
+        if (!m_bPipeSpawn)
+        {
+            ScriptedAI::MoveInLineOfSight(who);
+            return;
+        }
+
+        if (!m_bJumping && !m_creature->IsInCombat() && who->IsPlayer() && who->IsAlive() &&
+                m_creature->CanAttack(who) && m_creature->IsWithinDistInMap(who, 25.0f))
+            AttackStart(who);
+    }
+
+    void AttackStart(Unit* who) override
+    {
+        if (!who)
+            return;
+
+        ScriptedAI::AttackStart(who);
+
+        if (!m_bPipeSpawn || m_bJumping || m_creature->GetPositionZ() < 365.0f)
+            return;
+
+        float angle = who->GetAngle(m_creature);
+        float x = who->GetPositionX() + std::cos(angle) * 3.0f;
+        float y = who->GetPositionY() + std::sin(angle) * 3.0f;
+        m_bJumping = true;
+        m_jumpTargetGuid = who->GetObjectGuid();
+        m_creature->GetMotionMaster()->MoveJump(x, y, who->GetPositionZ(), 10.0f, 6.0f, POINT_PIPE_JUMP);
+    }
+
+    void MovementInform(uint32 movementType, uint32 pointId) override
+    {
+        if (movementType != EFFECT_MOTION_TYPE || pointId != POINT_PIPE_JUMP)
+            return;
+
+        m_bJumping = false;
+        if (Unit* target = m_creature->GetMap()->GetUnit(m_jumpTargetGuid))
+        {
+            if (target->IsAlive() && m_creature->CanAttack(target))
+                ScriptedAI::AttackStart(target);
+        }
+    }
+
+    void UpdateAI(const uint32 diff) override
+    {
+        if (m_bJumping || !m_creature->SelectHostileTarget() || !m_creature->GetVictim())
+            return;
+
+        if (m_uiFaceMaulTimer <= diff)
+        {
+            Unit* victim = m_creature->GetVictim();
+            float distance = m_creature->GetDistance(victim);
+            if (!victim->HasAura(SPELL_LEAPING_FACE_MAUL_AURA) && distance > 5.0f && distance < 30.0f)
+            {
+                if (DoCastSpellIfCan(victim, SPELL_LEAPING_FACE_MAUL) == CAST_OK)
+                    m_uiFaceMaulTimer = urand(15000, 20000);
+            }
+            else
+                m_uiFaceMaulTimer = 3000;
+        }
+        else
+            m_uiFaceMaulTimer -= diff;
+
+        DoMeleeAttackIfReady();
+    }
+};
+
+UnitAI* GetAI_npc_icc_vengeful_fleshreaper(Creature* creature)
+{
+    return new npc_icc_vengeful_fleshreaperAI(creature);
+}
 
 void AddSC_icecrown_citadel()
 {
@@ -521,6 +925,16 @@ void AddSC_icecrown_citadel()
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
+    pNewScript->Name = "npc_spire_frostwyrm_icc";
+    pNewScript->GetAI = &GetAI_npc_spire_frostwyrm_icc;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_icc_vengeful_fleshreaper";
+    pNewScript->GetAI = &GetAI_npc_icc_vengeful_fleshreaper;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
     pNewScript->Name = "at_putricides_trap";
     pNewScript->pAreaTrigger = &AreaTrigger_at_putricides_trap;
     pNewScript->RegisterSelf();
@@ -537,4 +951,5 @@ void AddSC_icecrown_citadel()
 
     RegisterSpellScript<RocketPack>("spell_rocket_pack");
     RegisterSpellScript<RocketPackPeriodic>("spell_rocket_pack_periodic");
+    RegisterSpellScript<GeistAlarm>("spell_icc_geist_alarm");
 }

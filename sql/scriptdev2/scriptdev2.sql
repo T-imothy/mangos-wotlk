@@ -1054,6 +1054,9 @@ UPDATE creature_template SET ScriptName='boss_blood_queen_lanathel' WHERE entry=
 UPDATE creature_template SET ScriptName='boss_sindragosa' WHERE entry=36853;
 UPDATE creature_template SET ScriptName='npc_rimefang_icc' WHERE entry=37533;
 UPDATE creature_template SET ScriptName='npc_spinestalker_icc' WHERE entry=37534;
+UPDATE creature_template SET ScriptName='npc_spire_frostwyrm_icc' WHERE entry=37230;
+UPDATE creature_template SET ScriptName='npc_sindragosa_trash' WHERE entry IN (37531,37532);
+UPDATE creature_template SET ScriptName='npc_sindragosa_gauntlet_controller' WHERE entry=37503;
 UPDATE creature_template SET ScriptName='mob_frost_bomb' WHERE entry=37186;
 UPDATE creature_template SET ScriptName='boss_festergut' WHERE entry=36626;
 UPDATE creature_template SET ScriptName='npc_puddle_stalker' WHERE entry=37013;
@@ -1069,7 +1072,8 @@ UPDATE creature_template SET ScriptName='npc_gluttonous_abomination_icc' WHERE e
 UPDATE creature_template SET ScriptName='npc_valithria_rot_worm' WHERE entry=37907;
 UPDATE creature_template SET ScriptName='npc_valithria_column_of_frost' WHERE entry=37918;
 UPDATE creature_template SET ScriptName='npc_blistering_zombie_icc' WHERE entry=37934;
-UPDATE creature_template SET ScriptName='npc_valithria_portal' WHERE entry IN (37945,38430);
+UPDATE creature_template SET ScriptName='npc_valithria_portal', NpcFlags=NpcFlags | 16777216 WHERE entry IN (37945,38430);
+UPDATE creature_template SET ScriptName='npc_valithria_portal_preeffect' WHERE entry IN (38186,38429);
 UPDATE creature_template SET ScriptName='npc_valithria_cloud' WHERE entry IN (37985,38421);
 UPDATE creature_template SET ScriptName='npc_valithria_mana_void' WHERE entry=38068;
 UPDATE creature_template SET ScriptName='boss_professor_putricide' WHERE entry=36678;
@@ -1079,12 +1083,25 @@ UPDATE creature_template SET ScriptName='npc_gas_cloud_icc' WHERE entry=37562;
 UPDATE creature_template SET ScriptName='npc_growing_ooze_puddle' WHERE entry=37690;
 UPDATE creature_template SET ScriptName='npc_choking_gas_bomb' WHERE entry=38159;
 UPDATE creature_template SET ScriptName='boss_the_lich_king_icc' WHERE entry=36597;
+UPDATE creature_template SET ScriptName='npc_tirion_fordring_tft' WHERE entry=38995;
+UPDATE creature_template SET ScriptName='npc_shambling_horror_icc' WHERE entry=37698;
+UPDATE creature_template SET ScriptName='npc_raging_spirit_icc' WHERE entry=36701;
+UPDATE creature_template SET ScriptName='npc_defile_icc' WHERE entry=38757;
+UPDATE creature_template SET ScriptName='npc_vile_spirit_icc' WHERE entry=37799;
+UPDATE creature_template SET ScriptName='npc_shadow_trap_icc' WHERE entry=39137;
+UPDATE creature_template SET ScriptName='npc_ice_sphere_icc' WHERE entry=36633;
+UPDATE creature_template SET ScriptName='npc_valkyr_shadowguard_icc' WHERE entry=36609;
+UPDATE creature_template SET ScriptName='npc_terenas_frostmourne_icc' WHERE entry IN (36823,39217);
+UPDATE creature_template SET ScriptName='npc_spirit_warden_icc' WHERE entry=36824;
+UPDATE creature_template SET ScriptName='npc_spirit_bomb_icc' WHERE entry=39189;
 UPDATE creature_template SET ScriptName='npc_saurfang_gunship', RegenerateStats=RegenerateStats&~2 WHERE entry=36939;
 UPDATE creature_template SET ScriptName='npc_muradin_gunship', RegenerateStats=RegenerateStats&~2 WHERE entry=36948;
 UPDATE creature_template SET ScriptName='npc_gunship', RegenerateStats=RegenerateStats&~2 WHERE entry IN (37215,37540);
 UPDATE creature_template SET ScriptName='npc_gunship_cannon' WHERE entry IN (36838,36839);
 UPDATE creature_template SET ScriptName='npc_gunship_soldier', RegenerateStats=RegenerateStats&~2 WHERE entry IN (36950,36957,36960,36961,36968,36969,36978,36982,37116,37117);
 UPDATE creature_template SET ScriptName='npc_zafod_boombox', NpcFlags=NpcFlags|1 WHERE entry=37184;
+UPDATE creature_template SET ScriptName='npc_frost_freeze_trap' WHERE entry=37744;
+UPDATE creature_template SET ScriptName='npc_icc_vengeful_fleshreaper' WHERE entry=37038;
 UPDATE gameobject_template SET ScriptName='go_icc_teleporter' WHERE entry IN (202235,202242,202243,202244,202245,202246);
 INSERT INTO scripted_event_id VALUES
 (23426,'event_gameobject_citadel_valve'),
@@ -1093,9 +1110,14 @@ INSERT INTO scripted_areatrigger VALUES
 (5604,'at_icecrown_citadel'),
 (5611,'at_lights_hammer'),
 (5612,'at_lights_hammer'),
+(5623,'at_icecrown_citadel'),
 (5628,'at_rampart_skull'),
+(5629,'at_rampart_skull'),
 (5630,'at_rampart_skull'),
+(5631,'at_rampart_skull'),
 (5647,'at_putricides_trap'),
+(5649,'at_icecrown_citadel'),
+(5698,'at_icecrown_citadel'),
 (5709,'at_icecrown_citadel'),
 (5718,'at_frozen_throne_tele'),
 (5732,'at_icecrown_citadel');
