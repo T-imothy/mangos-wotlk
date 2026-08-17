@@ -896,6 +896,19 @@ bool WorldSession::ProcessMovementInfo(MovementInfo& movementInfo, Unit* mover, 
     if (plMover && plMover->IsBeingTeleported() && recv_data.GetOpcode() != CMSG_MOVE_SET_COLLISION_HGT_ACK)
         return false;
 
+    // Fixed-position vehicles (turrets and cannons) are rooted but may still
+    // rotate.  The 3.3.5 client omits ROOT from some controlled-vehicle turn
+    // packets; rejecting those packets snaps the camera back and makes ICC's
+    // gunship cannons appear locked.  Preserve turning while preventing every
+    // form of translation the fixed-position DBC flag is meant to forbid.
+    if (mover->IsVehicle())
+        if (VehicleInfo* vehicleInfo = mover->GetVehicleInfo())
+            if (vehicleInfo->GetVehicleEntry()->m_flags & VEHICLE_FLAG_FIXED_POSITION)
+            {
+                movementInfo.RemoveMovementFlag(MOVEFLAG_MASK_MOVING);
+                movementInfo.AddMovementFlag(MOVEFLAG_ROOT);
+            }
+
     if (!VerifyMovementInfo(movementInfo, mover, recv_data.GetOpcode() == CMSG_FORCE_MOVE_UNROOT_ACK))
         return false;
 

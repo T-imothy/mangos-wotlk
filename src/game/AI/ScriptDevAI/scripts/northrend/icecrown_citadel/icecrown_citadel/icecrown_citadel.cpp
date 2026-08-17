@@ -78,11 +78,31 @@ enum
     SAY_PRECIOUS_DIES               = -1631070,
 
     // Gunship related spells
-    SPELL_AWARD_REPUTATION          = 73845,
+    SPELL_AWARD_REPUTATION          = 73843,
     SPELL_GUNSHIP_ACHIEVEMENT       = 72959,
     SPELL_TELEPORT_PLAYERS_VICTORY  = 72340,
+    SPELL_TELEPORT_PLAYERS_RESET_A  = 70446,
+    SPELL_TELEPORT_PLAYERS_RESET_H  = 71284,
     SPELL_CHECK_FOR_PLAYERS         = 70332,                // check for aura 70120 or 70121 on player; if not found cast 67335
 };
+
+namespace
+{
+Transport* GetGunshipTransport(Map* map, uint32 entry)
+{
+    for (Transport* transport : map->GetTransports())
+        if (transport->GetEntry() == entry)
+            return transport;
+
+    return nullptr;
+}
+
+void StartGunshipTransport(Map* map, uint32 entry)
+{
+    if (Transport* transport = GetGunshipTransport(map, entry))
+        transport->StartMovementNow();
+}
+}
 
 static const DialogueEntry aCitadelDialogue[] =
 {
@@ -120,10 +140,13 @@ static const DialogueEntry aCitadelDialogue[] =
 instance_icecrown_citadel::instance_icecrown_citadel(Map* pMap) : ScriptedInstance(pMap), DialogueHelper(aCitadelDialogue),
     m_uiTeam(0),
     m_uiPutricideValveTimer(0),
+    m_uiGunshipResetTimer(0),
+    m_uiLightsHammerDamnedKills(0),
     m_bHasMarrowgarIntroYelled(false),
     m_bHasDeathwhisperIntroYelled(false),
     m_bHasRimefangLanded(false),
-    m_bHasSpinestalkerLanded(false)
+    m_bHasSpinestalkerLanded(false),
+    m_bGunshipReloadPending(false)
 {
     Initialize();
 }
@@ -132,6 +155,10 @@ void instance_icecrown_citadel::Initialize()
 {
     InitializeDialogueHelper(this);
     memset(&m_auiEncounter, 0, sizeof(m_auiEncounter));
+    m_uiGunshipResetTimer = 0;
+    m_bGunshipReloadPending = false;
+    m_uiLightsHammerDamnedKills = 0;
+    m_sLightsHammerDamnedGuids.clear();
 
     for (bool& i : m_abAchievCriteria)
         i = false;
@@ -221,6 +248,7 @@ void instance_icecrown_citadel::OnCreatureCreate(Creature* pCreature)
         case NPC_SINDRAGOSA:
         case NPC_LICH_KING:
         case NPC_TIRION_FORDRING:
+        case NPC_TIRION_LIGHTS_HAMMER:
         case NPC_RIMEFANG:
         case NPC_SPINESTALKER:
         case NPC_VALITHRIA_COMBAT_TRIGGER:
@@ -234,6 +262,14 @@ void instance_icecrown_citadel::OnCreatureCreate(Creature* pCreature)
         case NPC_SKYBREAKER:
         case NPC_ORGRIMS_HAMMER:
             m_npcEntryGuidStore[pCreature->GetEntry()] = pCreature->GetObjectGuid();
+            break;
+        case NPC_THE_DAMNED:
+            // Only the two Damned immediately in front of Light's Hammer start
+            // the prologue. Record them at spawn time so later patrol movement
+            // cannot make another pack satisfy the positional check.
+            if (pCreature->GetPositionX() > -142.0f && pCreature->GetPositionX() < -138.0f &&
+                    pCreature->GetPositionY() > 2204.0f && pCreature->GetPositionY() < 2219.0f)
+                m_sLightsHammerDamnedGuids.insert(pCreature->GetObjectGuid());
             break;
         case NPC_SPIRE_FROSTWYRM:
             if (pCreature->IsTemporarySummon())
@@ -485,6 +521,27 @@ void instance_icecrown_citadel::OnCreatureDeath(Creature* pCreature)
 {
     switch (pCreature->GetEntry())
     {
+        case NPC_THE_DAMNED:
+            // The old EventAI chain depended on one Damned being placed in an
+            // undocumented phase. That phase was never reliably set, leaving
+            // Tirion's 156-second prologue stuck. Own the two-kill gate in the
+            // instance and keep the existing CMaNGOS movement/dialogue script.
+            if (m_sLightsHammerDamnedGuids.erase(pCreature->GetObjectGuid()) &&
+                    ++m_uiLightsHammerDamnedKills == 2)
+            {
+                if (Creature* pTirion = GetSingleCreatureFromStorage(NPC_TIRION_LIGHTS_HAMMER))
+                {
+                    // Start the existing 156-second movement/dialogue script
+                    // directly. Relaying this through Tirion's EventAI made the
+                    // prologue depend on his template AI assignment and could
+                    // silently leave the event idle even after both gate mobs
+                    // were killed.
+                    pTirion->StopMoving();
+                    pTirion->GetMotionMaster()->Clear(false, true);
+                    pTirion->GetMotionMaster()->MoveWaypoint();
+                }
+            }
+            break;
         case NPC_STINKY:
             if (Creature* pFestergut = GetSingleCreatureFromStorage(NPC_FESTERGUT))
             {
@@ -575,7 +632,7 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
                 // enable teleporters
                 DoToggleGameObjectFlags(GO_TRANSPORTER_LIGHTS_HAMMER, GO_FLAG_NO_INTERACT, false);
                 DoToggleGameObjectFlags(GO_TRANSPORTER_ORATORY_DAMNED, GO_FLAG_NO_INTERACT, false);
-                if (GameObject* pTransporter = GetSingleGameObjectFromStorage(GO_TRANSPORTER_LIGHTS_HAMMER))
+                if (GameObject* pTransporter = GetSingleGameObjectFromStorage(GO_TRANSPORTER_ORATORY_DAMNED))
                     pTransporter->SetGoState(GO_STATE_ACTIVE);
                 if (GameObject* pTransporter = GetSingleGameObjectFromStorage(GO_TRANSPORTER_LIGHTS_HAMMER))
                     pTransporter->SetGoState(GO_STATE_ACTIVE);
@@ -623,8 +680,11 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
             m_auiEncounter[uiType] = uiData;
             if (uiData == DONE)
             {
-                // enable loot; exact GO entry is handled on object create
-                DoToggleGameObjectFlags(m_uiTeam == ALLIANCE ? GO_GUNSHIP_ARMORY_A : GO_GUNSHIP_ARMORY_H, GO_FLAG_NO_INTERACT, false);
+                // Spawn and enable the difficulty-specific armory. All four
+                // variants are stored under their faction's base entry.
+                uint32 armoryEntry = m_uiTeam == ALLIANCE ? GO_GUNSHIP_ARMORY_A : GO_GUNSHIP_ARMORY_H;
+                DoRespawnGameObject(armoryEntry, 60 * MINUTE);
+                DoToggleGameObjectFlags(armoryEntry, GO_FLAG_NO_INTERACT, false);
 
                 // enable teleporter
                 DoToggleGameObjectFlags(GO_TRANSPORTER_DEATHBRINGER, GO_FLAG_NO_INTERACT, false);
@@ -662,30 +722,36 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
                 {
                     DoScriptText(m_uiTeam == ALLIANCE ? SAY_GUNSHIP_ALLY_WIN : SAY_GUNSHIP_HORDE_WIN, pSource);
                     pSource->PlayMusic(0);
-
-                    // ToDo: start WP movement on the deck and prepare to summon the entry NPCs for Saurfang
                 }
 
+                if (Creature* pEnemyCaptain = GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_GUNSHIP_SAURFANG : NPC_GUNSHIP_MURADIN))
+                    pEnemyCaptain->AI()->SendAIEvent(AI_EVENT_CUSTOM_B, pEnemyCaptain, pEnemyCaptain);
+
                 // move the actual gunships to next position
-                if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(m_uiTeam == ALLIANCE ? GO_ORGRIMS_HAMMER_A : GO_ORGRIMS_HAMMER_H))))
-                    gunship->SetGoState(GO_STATE_ACTIVE);
-                if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(m_uiTeam == ALLIANCE ? GO_THE_SKYBREAKER_A : GO_THE_SKYBREAKER_H))))
-                    gunship->SetGoState(GO_STATE_ACTIVE);
+                StartGunshipTransport(instance, m_uiTeam == ALLIANCE ? GO_ORGRIMS_HAMMER_A : GO_ORGRIMS_HAMMER_H);
+                StartGunshipTransport(instance, m_uiTeam == ALLIANCE ? GO_THE_SKYBREAKER_A : GO_THE_SKYBREAKER_H);
+
+                // The Deathbringer's Rise cast and faction portal are the
+                // in-engine continuation cinematic after the ships dock.
+                for (auto& playerRef : instance->GetPlayers())
+                    if (Player* player = playerRef.getSource())
+                    {
+                        ProcessEventNpcs(player);
+                        break;
+                    }
             }
             else if (uiData == SPECIAL)
             {
                 // move the ships in combat position
                 if (m_uiTeam == ALLIANCE)
                 {
-                    if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(GO_THE_SKYBREAKER_A))))
-                        gunship->SetGoState(GO_STATE_ACTIVE);
+                    StartGunshipTransport(instance, GO_THE_SKYBREAKER_A);
 
                     StartNextDialogueText(SAY_GUNSHIP_START_ALLY_1);
                 }
                 else if (m_uiTeam == HORDE)
                 {
-                    if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(GO_ORGRIMS_HAMMER_H))))
-                        gunship->SetGoState(GO_STATE_ACTIVE);
+                    StartGunshipTransport(instance, GO_ORGRIMS_HAMMER_H);
 
                     StartNextDialogueText(SAY_GUNSHIP_START_HORDE_1);
                 }
@@ -695,6 +761,7 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
                 // start encounters
                 if (Creature* pShip = GetSingleCreatureFromStorage(NPC_SKYBREAKER))
                 {
+                    pShip->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, pShip, pShip);
                     SendEncounterFrame(ENCOUNTER_FRAME_ENGAGE, pShip->GetObjectGuid());
 
                     pShip->SetHealth(pShip->GetMaxHealth());
@@ -705,6 +772,7 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
                 }
                 if (Creature* pShip = GetSingleCreatureFromStorage(NPC_ORGRIMS_HAMMER))
                 {
+                    pShip->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, pShip, pShip);
                     SendEncounterFrame(ENCOUNTER_FRAME_ENGAGE, pShip->GetObjectGuid());
 
                     pShip->SetHealth(pShip->GetMaxHealth());
@@ -718,7 +786,10 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
                 if (Creature* pSource = GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_GUNSHIP_MURADIN : NPC_GUNSHIP_SAURFANG))
                     pSource->PlayMusic(MUSIC_ID_GUNSHIP);
 
-                // ToDo: start summoning adds
+                // The enemy captain owns the ranged crews, freeze mage and
+                // timed boarding waves for either faction.
+                if (Creature* pEnemyCaptain = GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_GUNSHIP_SAURFANG : NPC_GUNSHIP_MURADIN))
+                    pEnemyCaptain->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, pEnemyCaptain, pEnemyCaptain);
             }
             else if (uiData == FAIL)
             {
@@ -730,9 +801,30 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
 
                 // stop music
                 if (Creature* pSource = GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_GUNSHIP_MURADIN : NPC_GUNSHIP_SAURFANG))
+                {
                     pSource->PlayMusic(0);
+                    pSource->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+                }
 
-                // ToDo: handle fail event
+                // Return survivors to the dock and make both ship-health
+                // units ready for a clean repeat pull.
+                if (Creature* pPlayerShip = GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_SKYBREAKER : NPC_ORGRIMS_HAMMER))
+                    pPlayerShip->CastSpell(pPlayerShip,
+                        m_uiTeam == ALLIANCE ? SPELL_TELEPORT_PLAYERS_RESET_A : SPELL_TELEPORT_PLAYERS_RESET_H,
+                        TRIGGERED_OLD_TRIGGERED);
+                if (Creature* pShip = GetSingleCreatureFromStorage(NPC_SKYBREAKER))
+                    pShip->SetHealth(pShip->GetMaxHealth());
+                if (Creature* pShip = GetSingleCreatureFromStorage(NPC_ORGRIMS_HAMMER))
+                    pShip->SetHealth(pShip->GetMaxHealth());
+
+                if (Creature* pEnemyCaptain = GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_GUNSHIP_SAURFANG : NPC_GUNSHIP_MURADIN))
+                    pEnemyCaptain->AI()->SendAIEvent(AI_EVENT_CUSTOM_B, pEnemyCaptain, pEnemyCaptain);
+
+                // Give reset teleports time to land, then remove and recreate
+                // the opposing transport so its static passengers and route
+                // begin from a pristine state on the next pull.
+                m_uiGunshipResetTimer = 8000;
+                m_bGunshipReloadPending = false;
             }
             break;
         case TYPE_DEATHBRINGER_SAURFANG:
@@ -948,28 +1040,36 @@ void instance_icecrown_citadel::JustDidDialogueStep(int32 iEntry)
     switch (iEntry)
     {
         case SAY_GUNSHIP_START_ALLY_5:
-            if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(GO_ORGRIMS_HAMMER_A))))
-                gunship->SetGoState(GO_STATE_ACTIVE);
+            StartGunshipTransport(instance, GO_ORGRIMS_HAMMER_A);
             SetData(TYPE_GUNSHIP_BATTLE, IN_PROGRESS);
             break;
         case SAY_GUNSHIP_START_HORDE_4:
-            if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(GO_THE_SKYBREAKER_H))))
-                gunship->SetGoState(GO_STATE_ACTIVE);
+            StartGunshipTransport(instance, GO_THE_SKYBREAKER_H);
             SetData(TYPE_GUNSHIP_BATTLE, IN_PROGRESS);
             break;
         case SAY_GUNSHIP_START_ALLY_3:
         {
-            TransportTemplate* const enemyGunship = sTransportMgr.GetTransportTemplate(GO_ORGRIMS_HAMMER_A);
-            Transport::LoadTransport(*enemyGunship, instance, true);
-            if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(GO_ORGRIMS_HAMMER_A))))
+            if (!GetGunshipTransport(instance, GO_ORGRIMS_HAMMER_A))
+            {
+                if (TransportTemplate* enemyGunship = sTransportMgr.GetTransportTemplate(GO_ORGRIMS_HAMMER_A))
+                    Transport::LoadTransport(*enemyGunship, instance, true);
+                else
+                    script_error_log("instance_icecrown_citadel: missing transport template %u", GO_ORGRIMS_HAMMER_A);
+            }
+            if (Transport* gunship = GetGunshipTransport(instance, GO_ORGRIMS_HAMMER_A))
                 gunship->GetVisibilityData().SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
             break;
         }
         case SAY_GUNSHIP_START_HORDE_3:
         {
-            TransportTemplate* const enemyGunship = sTransportMgr.GetTransportTemplate(GO_THE_SKYBREAKER_H);
-            Transport::LoadTransport(*enemyGunship, instance, true);
-            if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(GO_THE_SKYBREAKER_H))))
+            if (!GetGunshipTransport(instance, GO_THE_SKYBREAKER_H))
+            {
+                if (TransportTemplate* enemyGunship = sTransportMgr.GetTransportTemplate(GO_THE_SKYBREAKER_H))
+                    Transport::LoadTransport(*enemyGunship, instance, true);
+                else
+                    script_error_log("instance_icecrown_citadel: missing transport template %u", GO_THE_SKYBREAKER_H);
+            }
+            if (Transport* gunship = GetGunshipTransport(instance, GO_THE_SKYBREAKER_H))
                 gunship->GetVisibilityData().SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
             break;
         }
@@ -1059,6 +1159,83 @@ void instance_icecrown_citadel::Update(uint32 uiDiff)
 {
     DialogueUpdate(uiDiff);
 
+    if (m_uiGunshipResetTimer)
+    {
+        if (m_uiGunshipResetTimer <= uiDiff)
+        {
+            if (!m_bGunshipReloadPending)
+            {
+                uint32 playerTransportEntry = m_uiTeam == ALLIANCE ? GO_THE_SKYBREAKER_A : GO_ORGRIMS_HAMMER_H;
+                uint32 enemyTransportEntry = m_uiTeam == ALLIANCE ? GO_ORGRIMS_HAMMER_A : GO_THE_SKYBREAKER_H;
+                Transport* enemyGunship = GetGunshipTransport(instance, enemyTransportEntry);
+                Transport* playerGunship = GetGunshipTransport(instance, playerTransportEntry);
+
+                // Reset spells are data-driven and can fail if their implicit
+                // target data is incomplete. Relocate any remaining player
+                // passengers before removing a transport; this also guarantees
+                // that a failed pull cannot leave the client floating in space.
+                for (auto& playerRef : instance->GetPlayers())
+                    if (Player* player = playerRef.getSource())
+                        if ((playerGunship && playerGunship->HasPassenger(player)) ||
+                            (enemyGunship && enemyGunship->HasPassenger(player)))
+                        {
+                            if (player->IsBoarded())
+                                player->ExitVehicle();
+                            player->TeleportTo(instance->GetId(), -17.0711f, 2211.47f, 30.0546f, 3.66333f);
+                        }
+
+                for (auto& playerRef : instance->GetPlayers())
+                    if (Player* player = playerRef.getSource())
+                        if ((playerGunship && playerGunship->HasPassenger(player)) ||
+                            (enemyGunship && enemyGunship->HasPassenger(player)))
+                        {
+                            m_uiGunshipResetTimer = 1000;
+                            return;
+                        }
+
+                if (enemyGunship)
+                    enemyGunship->RemoveFromMap();
+                if (playerGunship)
+                    playerGunship->RemoveFromMap();
+
+                m_bGunshipReloadPending = true;
+                m_uiGunshipResetTimer = 1000;
+            }
+            else
+            {
+                uint32 playerTransportEntry = m_uiTeam == ALLIANCE ? GO_THE_SKYBREAKER_A : GO_ORGRIMS_HAMMER_H;
+                if (!GetGunshipTransport(instance, playerTransportEntry))
+                {
+                    if (TransportTemplate* playerGunship = sTransportMgr.GetTransportTemplate(playerTransportEntry))
+                        Transport::LoadTransport(*playerGunship, instance, true);
+                    else
+                        script_error_log("instance_icecrown_citadel: missing transport template %u", playerTransportEntry);
+                }
+
+                if (Transport* gunship = GetGunshipTransport(instance, playerTransportEntry))
+                {
+                    gunship->GetVisibilityData().SetVisibilityDistanceOverride(VisibilityDistanceType::Infinite);
+                    // FAIL is useful while the reset is underway, but the
+                    // freshly loaded ship and captain must expose a pristine
+                    // pull to clients and scripts.
+                    m_auiEncounter[TYPE_GUNSHIP_BATTLE] = NOT_STARTED;
+                    m_bGunshipReloadPending = false;
+                    m_uiGunshipResetTimer = 0;
+                }
+                else
+                {
+                    // Passenger deletion is deferred by the map.  If that
+                    // prevented recreation this tick, retry instead of
+                    // silently completing with no player ship.
+                    m_uiGunshipResetTimer = 1000;
+                    return;
+                }
+            }
+        }
+        else
+            m_uiGunshipResetTimer -= uiDiff;
+    }
+
     if (m_uiPutricideValveTimer)
     {
         if (m_uiPutricideValveTimer <= uiDiff)
@@ -1079,8 +1256,7 @@ void instance_icecrown_citadel::Update(uint32 uiDiff)
 
 void instance_icecrown_citadel::ProcessEventNpcs(Player* pPlayer)
 {
-    // ToDo: enable this when gunship is implementee
-    //if (GetData(TYPE_GUNSHIP_BATTLE) == DONE)
+    if (GetData(TYPE_GUNSHIP_BATTLE) == DONE)
     {
         // Summon Saurfang mobs
         for (const auto& aEventBeginLocation : aSaurfangLocations)
@@ -1119,17 +1295,13 @@ void instance_icecrown_citadel::ExecuteChatCommand(ChatHandler* handler, char* a
     }
     else if (val == "continuegunship")
     {
-        if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(GO_THE_SKYBREAKER_A))))
-            gunship->SetGoState(GO_STATE_ACTIVE);
-        if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(GO_ORGRIMS_HAMMER_H))))
-            gunship->SetGoState(GO_STATE_ACTIVE);
+        StartGunshipTransport(instance, GO_THE_SKYBREAKER_A);
+        StartGunshipTransport(instance, GO_ORGRIMS_HAMMER_H);
     }
     else if (val == "continueenemygunship")
     {
-        if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(GO_THE_SKYBREAKER_H))))
-            gunship->SetGoState(GO_STATE_ACTIVE);
-        if (GenericTransport* gunship = instance->GetTransport(ObjectGuid(HIGHGUID_MO_TRANSPORT, uint32(GO_ORGRIMS_HAMMER_A))))
-            gunship->SetGoState(GO_STATE_ACTIVE);
+        StartGunshipTransport(instance, GO_THE_SKYBREAKER_H);
+        StartGunshipTransport(instance, GO_ORGRIMS_HAMMER_A);
     }
     else if (val == "lichkingfloor")
     {

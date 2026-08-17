@@ -448,11 +448,23 @@ struct LadyDeathwhisperElevator : public GameObjectAI, public TimerManager
 
     void JustReachedStopPoint() override
     {
-        ResetTimer(1, 5000);
+        // The lift is progression beyond Deathwhisper. Do not let its
+        // automatic shuttle loop start before her encounter is complete.
+        if (InstanceData* instance = m_go->GetMap()->GetInstanceData())
+        {
+            if (instance->GetData(TYPE_LADY_DEATHWHISPER) == DONE)
+                ResetTimer(1, 5000);
+        }
     }
 
     void HandleStateChange()
     {
+        if (InstanceData* instance = m_go->GetMap()->GetInstanceData())
+        {
+            if (instance->GetData(TYPE_LADY_DEATHWHISPER) != DONE)
+                return;
+        }
+
         m_go->SetGoState(m_go->GetGoState() == GO_STATE_READY ? GO_STATE_ACTIVE : GO_STATE_READY);
     }
 
