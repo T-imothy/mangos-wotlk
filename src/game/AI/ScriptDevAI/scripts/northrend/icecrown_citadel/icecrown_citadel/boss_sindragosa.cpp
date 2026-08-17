@@ -16,7 +16,7 @@
 
 /* ScriptData
 SDName: boss_sindragosa
-SD%Complete: 80%
+SD%Complete: 90%
 SDComment: requires core support for ice blocks (spells and GO in LoS checking)
 SDCategory: Icecrown Citadel
 EndScriptData */
@@ -65,6 +65,11 @@ enum
     // Phase 3
     SPELL_MYSTIC_BUFFET         = 70128,
     SPELL_ICE_TOMB_SINGLE       = 69675,
+    SPELL_FROST_BEACON          = 70126,
+    SPELL_ICE_TOMB_DAMAGE       = 70157,
+    SPELL_ASPHYXIATION          = 71665,
+
+    NPC_ICE_TOMB                = 36980,
 
     // Rimefang
     SPELL_RIMEFANG_FROST_AURA   = 71387,
@@ -161,6 +166,8 @@ struct boss_sindragosaAI : public ScriptedAI
     uint32 m_uiUnchainedMagicTimer;
     uint32 m_uiFrostBombTimer;
     uint32 m_uiIceTombSingleTimer;
+    uint32 m_uiPendingTombTimer;
+    GuidList m_pendingTombTargets;
 
     void Reset() override
     {
@@ -173,6 +180,8 @@ struct boss_sindragosaAI : public ScriptedAI
         m_uiIcyGripTimer            = 35000;
         m_uiIceTombSingleTimer      = 15000;
         m_uiUnchainedMagicTimer     = urand(15000, 30000);
+        m_uiPendingTombTimer        = 0;
+        m_pendingTombTargets.clear();
     }
 
     void SetFlying(bool bIsFlying)
@@ -234,6 +243,49 @@ struct boss_sindragosaAI : public ScriptedAI
             m_pInstance->SetData(TYPE_SINDRAGOSA, DONE);
     }
 
+    void MarkIceTombTargets(uint32 count)
+    {
+        std::vector<Player*> targets;
+        for (auto& playerRef : m_creature->GetMap()->GetPlayers())
+        {
+            Player* player = playerRef.getSource();
+            if (player && player->IsAlive() && player != m_creature->GetVictim() &&
+                !player->HasAura(SPELL_FROST_BEACON) && m_creature->IsWithinDistInMap(player, 180.0f))
+                targets.push_back(player);
+        }
+
+        while (count-- && !targets.empty())
+        {
+            uint32 index = urand(0, targets.size() - 1);
+            Player* target = targets[index];
+            target->CastSpell(target, SPELL_FROST_BEACON, TRIGGERED_OLD_TRIGGERED);
+            m_pendingTombTargets.push_back(target->GetObjectGuid());
+            targets.erase(targets.begin() + index);
+        }
+
+        if (!m_pendingTombTargets.empty())
+            m_uiPendingTombTimer = 7000;
+    }
+
+    void CreatePendingIceTombs()
+    {
+        for (GuidList::const_iterator itr = m_pendingTombTargets.begin(); itr != m_pendingTombTargets.end(); ++itr)
+        {
+            Player* target = m_creature->GetMap()->GetPlayer(*itr);
+            if (!target || !target->IsAlive())
+                continue;
+
+            target->RemoveAurasDueToSpell(SPELL_FROST_BEACON);
+            target->CastSpell(target, SPELL_ICE_TOMB_PROTECTION, TRIGGERED_OLD_TRIGGERED);
+            target->CastSpell(target, SPELL_ICE_TOMB_DAMAGE, TRIGGERED_OLD_TRIGGERED);
+            if (Creature* tomb = m_creature->SummonCreature(NPC_ICE_TOMB, target->GetPositionX(), target->GetPositionY(),
+                    target->GetPositionZ(), target->GetOrientation(), TEMPSPAWN_DEAD_DESPAWN, 0))
+                tomb->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, target, tomb);
+        }
+        m_pendingTombTargets.clear();
+        m_uiPendingTombTimer = 0;
+    }
+
     void MovementInform(uint32 uiMovementType, uint32 uiPointId) override
     {
         if (uiMovementType != POINT_MOTION_TYPE)
@@ -293,7 +345,7 @@ struct boss_sindragosaAI : public ScriptedAI
         {
             m_creature->SetOrientation(M_PI_F); // face the platform
             m_uiFrostBombTimer = 10000; // set initial Frost Bomb timer
-            DoCastSpellIfCan(m_creature, SPELL_ICE_TOMB);
+            MarkIceTombTargets(m_pInstance && m_pInstance->Is25ManDifficulty() ? 5 : 2);
             m_uiPhase = SINDRAGOSA_PHASE_AIR;
         }
     }
@@ -309,6 +361,14 @@ struct boss_sindragosaAI : public ScriptedAI
 
     void UpdateAI(const uint32 uiDiff) override
     {
+        if (m_uiPendingTombTimer)
+        {
+            if (m_uiPendingTombTimer <= uiDiff)
+                CreatePendingIceTombs();
+            else
+                m_uiPendingTombTimer -= uiDiff;
+        }
+
         if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
             return;
 
@@ -334,11 +394,8 @@ struct boss_sindragosaAI : public ScriptedAI
                 // Ice Tomb
                 if (m_uiIceTombSingleTimer <= uiDiff)
                 {
-                    if (Unit* pTarget = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 1, SPELL_ICE_TOMB_SINGLE, SELECT_FLAG_PLAYER))
-                    {
-                        if (DoCastSpellIfCan(pTarget, SPELL_ICE_TOMB) == CAST_OK)
-                            m_uiIceTombSingleTimer = 15000;
-                    }
+                    MarkIceTombTargets(1);
+                    m_uiIceTombSingleTimer = urand(16000, 23000);
                 }
                 else
                     m_uiIceTombSingleTimer -= uiDiff;
@@ -456,6 +513,50 @@ struct boss_sindragosaAI : public ScriptedAI
     }
 };
 
+struct npc_ice_tomb_iccAI : public Scripted_NoMovementAI
+{
+    npc_ice_tomb_iccAI(Creature* creature) : Scripted_NoMovementAI(creature), m_asphyxiationTimer(20000) { }
+
+    ObjectGuid m_targetGuid;
+    uint32 m_asphyxiationTimer;
+
+    void ReceiveAIEvent(AIEventType eventType, Unit* sender, Unit* /*invoker*/, uint32 /*miscValue*/) override
+    {
+        if (eventType == AI_EVENT_CUSTOM_A && sender && sender->IsPlayer())
+            m_targetGuid = sender->GetObjectGuid();
+    }
+
+    void RemovePrisonAuras()
+    {
+        if (Player* target = m_creature->GetMap()->GetPlayer(m_targetGuid))
+        {
+            target->RemoveAurasDueToSpell(SPELL_ICE_TOMB_PROTECTION);
+            target->RemoveAurasDueToSpell(SPELL_ICE_TOMB_DAMAGE);
+            target->RemoveAurasDueToSpell(SPELL_ASPHYXIATION);
+            target->RemoveAurasDueToSpell(SPELL_FROST_BEACON);
+        }
+    }
+
+    void JustDied(Unit* /*killer*/) override { RemovePrisonAuras(); }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!m_asphyxiationTimer)
+            return;
+        if (m_asphyxiationTimer <= diff)
+        {
+            if (Player* target = m_creature->GetMap()->GetPlayer(m_targetGuid))
+                if (target->IsAlive())
+                    target->CastSpell(target, SPELL_ASPHYXIATION, TRIGGERED_OLD_TRIGGERED);
+            m_asphyxiationTimer = 0;
+        }
+        else
+            m_asphyxiationTimer -= diff;
+    }
+};
+
+UnitAI* GetAI_npc_ice_tomb_icc(Creature* creature) { return new npc_ice_tomb_iccAI(creature); }
+
 UnitAI* GetAI_boss_sindragosa(Creature* pCreature)
 {
     return new boss_sindragosaAI(pCreature);
@@ -540,6 +641,7 @@ struct npc_rimefang_iccAI : public ScriptedAI
         Creature* pSpinestalker = m_pInstance->GetSingleCreatureFromStorage(NPC_SPINESTALKER);
         if (!pSpinestalker || !pSpinestalker->IsAlive())
         {
+            m_pInstance->OpenSindragosaShortcut();
             if (Creature* pSindragosa = m_creature->SummonCreature(NPC_SINDRAGOSA, SindragosaPosition[7][0], SindragosaPosition[7][1], SindragosaPosition[7][2], 0.0f, TEMPSPAWN_MANUAL_DESPAWN, 0))
                 pSindragosa->SetInCombatWithZone();
         }
@@ -699,6 +801,7 @@ struct npc_spinestalker_iccAI : public ScriptedAI
         Creature* pRimefang = m_pInstance->GetSingleCreatureFromStorage(NPC_RIMEFANG);
         if (!pRimefang || !pRimefang->IsAlive())
         {
+            m_pInstance->OpenSindragosaShortcut();
             if (Creature* pSindragosa = m_creature->SummonCreature(NPC_SINDRAGOSA, SindragosaPosition[7][0], SindragosaPosition[7][1], SindragosaPosition[7][2], 0.0f, TEMPSPAWN_MANUAL_DESPAWN, 0))
                 pSindragosa->SetInCombatWithZone();
         }
@@ -866,5 +969,10 @@ void AddSC_boss_sindragosa()
     pNewScript = new Script;
     pNewScript->Name = "mob_frost_bomb";
     pNewScript->GetAI = &GetAI_mob_frost_bomb;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_ice_tomb_icc";
+    pNewScript->GetAI = &GetAI_npc_ice_tomb_icc;
     pNewScript->RegisterSelf();
 }

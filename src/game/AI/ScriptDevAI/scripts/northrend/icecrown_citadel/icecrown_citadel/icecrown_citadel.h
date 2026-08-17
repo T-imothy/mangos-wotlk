@@ -107,8 +107,19 @@ enum
     NPC_PUDDLE_STALKER              = 37013,        // related to Festergut and Rotface
     NPC_RIMEFANG                    = 37533,
     NPC_SPINESTALKER                = 37534,
+    NPC_FROSTWARDEN_HANDLER         = 37531,
+    NPC_FROSTWING_WHELP             = 37532,
     NPC_OOZE_TENTACLE_STALKER       = 38308,        // accessories to Putricide
     NPC_SLIMY_TENTACLE_STALKER      = 38309,
+
+    // Frostwing Halls gauntlet
+    NPC_CAPTAIN_ARNATH              = 37122,
+    NPC_CAPTAIN_BRANDON             = 37123,
+    NPC_CAPTAIN_GRONDEL             = 37124,
+    NPC_CAPTAIN_RUPERT              = 37125,
+    NPC_SISTER_SVALNA               = 37126,
+    NPC_CROK_SCOURGEBANE            = 37129,
+    NPC_IMPALING_SPEAR              = 38248,
 
     // Blood wing entrance creatures
     NPC_DARFALLEN_NOBLE             = 37663,
@@ -118,12 +129,16 @@ enum
     NPC_EMPOWERING_ORB_STALKER      = 36934,
 
     // achievement types
-    MAX_SPECIAL_ACHIEV_CRITS        = 4,
+    MAX_SPECIAL_ACHIEV_CRITS        = 8,
 
     TYPE_ACHIEV_BONED               = 0,
     TYPE_ACHIEV_MADE_A_MESS         = 1,
     TYPE_ACHIEV_DANCES_OOZES        = 2,
     TYPE_ACHIEV_NAUSEA              = 3,
+    TYPE_ACHIEV_ORB_WHISPERER       = 4,
+    TYPE_ACHIEV_PORTAL_JOCKEY       = 5,
+    TYPE_ACHIEV_ALL_YOU_CAN_EAT     = 6,
+    TYPE_ACHIEV_FLU_SHOT_SHORTAGE   = 7,
 
     // GameObjects entries
     GO_ICEWALL_1                    = 201911,
@@ -363,6 +378,14 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         // Open Putricide door in a few seconds
         void DoPreparePutricideDoor() { m_uiPutricideValveTimer = 15000; }
 
+        // Frozen Throne platform state used by the Lich King transitions.
+        void SetLichKingPlatformDamaged(bool damaged);
+
+        // Frostwing whelps are split between the two frostwyrms. Each dragon
+        // lands only after its own trash group has been cleared.
+        void StartSindragosaFrostwyrm(uint32 entry, Player* player = nullptr);
+        void OpenSindragosaShortcut();
+
         void SetSpecialAchievementCriteria(uint32 uiType, bool bIsMet);
         bool CheckAchievementCriteriaMeet(uint32 uiCriteriaId, Player const* pSource, Unit const* pTarget = nullptr, uint32 uiMiscvalue1 = 0) const override;
 
@@ -404,6 +427,8 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         GuidSet m_sDarkfallenCreaturesLowerGuids;
         GuidSet m_sDarkfallenCreaturesLeftGuids;
         GuidSet m_sDarkfallenCreaturesRightGuids;
+        GuidSet m_sRimefangTrashGuids;
+        GuidSet m_sSpinestalkerTrashGuids;
 };
 
 #endif

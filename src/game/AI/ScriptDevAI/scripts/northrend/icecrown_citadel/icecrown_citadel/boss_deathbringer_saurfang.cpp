@@ -106,11 +106,11 @@ struct boss_deathbringer_saurfangAI : public CombatAI
         }
 
         // common actions
-        AddCombatAction(DEATHBRINGER_BERSERK, uint32(m_bIsHeroicMode ? 6 : 8 * MINUTE * IN_MILLISECONDS));
-        AddCombatAction(DEATHBRINGER_RUNE_OF_BLOOD, 25000u);
-        AddCombatAction(DEATHBRINGER_BOILING_BLOOD, 19000u);
-        AddCombatAction(DEATHBRINGER_BLOOD_NOVA, 20000u);
-        AddCombatAction(DEATHBRINGER_BLOOD_BEAST, 40000u);
+        AddCombatAction(DEATHBRINGER_BERSERK, uint32((m_bIsHeroicMode ? 6 : 8) * MINUTE * IN_MILLISECONDS));
+        AddCombatAction(DEATHBRINGER_RUNE_OF_BLOOD, 20000u);
+        AddCombatAction(DEATHBRINGER_BOILING_BLOOD, 15500u);
+        AddCombatAction(DEATHBRINGER_BLOOD_NOVA, 17000u);
+        AddCombatAction(DEATHBRINGER_BLOOD_BEAST, 30000u);
 
         if (m_bIsHeroicMode)
             AddCombatAction(DEATHBRINGER_SCENT_OF_BLOOD, 47000u);
@@ -222,7 +222,7 @@ struct boss_deathbringer_saurfangAI : public CombatAI
         summoned->CastSpell(summoned, SPELL_BLOOD_LINK_BEAST, TRIGGERED_OLD_TRIGGERED);
 
         // Note: the summoned should be activated only after 2-3 seconds after summon - can be done in eventAI
-        if (Unit* pTarget = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 0))
+        if (Unit* pTarget = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 0, nullptr, SELECT_FLAG_PLAYER))
             summoned->AI()->AttackStart(pTarget);
     }
 
@@ -257,15 +257,15 @@ struct boss_deathbringer_saurfangAI : public CombatAI
                 break;
             case DEATHBRINGER_RUNE_OF_BLOOD:
                 if (DoCastSpellIfCan(m_creature->GetVictim(), SPELL_RUNE_OF_BLOOD) == CAST_OK)
-                    ResetCombatAction(action, 25000);
+                    ResetCombatAction(action, urand(20000, 25000));
                 break;
             case DEATHBRINGER_BOILING_BLOOD:
                 if (DoCastSpellIfCan(m_creature, SPELL_BOILING_BLOOD) == CAST_OK)
-                    ResetCombatAction(action, 15000);
+                    ResetCombatAction(action, urand(15000, 20000));
                 break;
             case DEATHBRINGER_BLOOD_NOVA:
                 if (DoCastSpellIfCan(m_creature, SPELL_BLOOD_NOVA) == CAST_OK)
-                    ResetCombatAction(action, 20000);
+                    ResetCombatAction(action, urand(20000, 25000));
                 break;
             case DEATHBRINGER_BLOOD_BEAST:
                 DoScriptText(SAY_BLOODBEASTS, m_creature);

@@ -16,8 +16,8 @@
 
 /* ScriptData
 SDName: boss_valithria
-SD%Complete: 70%
-SDComment: Native encounter flow, add waves, portals and dream clouds. Portal Jockey and retail pre-portal visuals remain TODO.
+SD%Complete: 90%
+SDComment: Native encounter flow, add waves, portals, dream clouds and Portal Jockey tracking.
 SDCategory: Icecrown Citadel
 EndScriptData */
 
@@ -148,6 +148,8 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
     bool m_said75Percent;
     bool m_said25Percent;
     bool m_berserk;
+    uint32 m_portalsSpawned;
+    uint32 m_portalsUsed;
 
     void Reset() override
     {
@@ -167,6 +169,8 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
         m_berserkTimer = 7 * MINUTE * IN_MILLISECONDS;
         m_dreamSlipTimer = 0;
         m_elapsedTime = 0;
+        m_portalsSpawned = 0;
+        m_portalsUsed = 0;
 
         if (m_victory)
         {
@@ -273,6 +277,10 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
 
         m_encounterActive = true;
         m_elapsedTime = 0;
+        m_portalsSpawned = 0;
+        m_portalsUsed = 0;
+        if (m_instance)
+            m_instance->SetSpecialAchievementCriteria(TYPE_ACHIEV_PORTAL_JOCKEY, true);
         DoScriptText(SAY_AGGRO, m_creature);
 
         // Pull every initial channeler when any one of them (or Valithria) is
@@ -333,6 +341,7 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
             float y = m_creature->GetPositionY() + std::sin(angle) * distance;
             m_creature->SummonCreature(portalEntry, x, y, m_creature->GetPositionZ(), angle,
                 TEMPSPAWN_TIMED_DESPAWN, 15000);
+            ++m_portalsSpawned;
         }
 
         // Clouds live only in phase 16 and are consumed by players in Dream State.
@@ -435,7 +444,11 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
         ClearDreamAuras();
 
         if (m_instance)
+        {
+            if (m_portalsUsed != m_portalsSpawned)
+                m_instance->SetSpecialAchievementCriteria(TYPE_ACHIEV_PORTAL_JOCKEY, false);
             m_instance->SetData(TYPE_VALITHRIA, DONE);
+        }
 
         m_dreamSlipTimer = 3500;
     }
@@ -552,6 +565,8 @@ struct boss_valithria_dreamwalkerAI : public ScriptedAI
 
         UpdateSummonTimers(diff);
     }
+
+    void PortalUsed() { ++m_portalsUsed; }
 };
 
 struct valithria_hostile_addAI : public ScriptedAI
@@ -942,7 +957,7 @@ struct npc_valithria_cloudAI : public ScriptedAI
                 continue;
 
             m_consumed = true;
-            m_creature->CastSpell(m_creature, SPELL_EMERALD_VIGOR, TRIGGERED_NONE);
+            player->CastSpell(player, SPELL_EMERALD_VIGOR, TRIGGERED_OLD_TRIGGERED);
             if (m_creature->GetEntry() == NPC_NIGHTMARE_CLOUD)
                 m_creature->CastSpell(player, SPELL_TWISTED_NIGHTMARES, TRIGGERED_OLD_TRIGGERED);
             m_creature->ForcedDespawn(1000);
@@ -958,6 +973,9 @@ bool NpcSpellClick_npc_valithria_portal(Player* player, Creature* portal, uint32
         return true;
 
     player->CastSpell(player, SPELL_DREAM_STATE, TRIGGERED_OLD_TRIGGERED);
+    if (Creature* valithria = instance->GetSingleCreatureFromStorage(NPC_VALITHRIA))
+        if (boss_valithria_dreamwalkerAI* ai = dynamic_cast<boss_valithria_dreamwalkerAI*>(valithria->AI()))
+            ai->PortalUsed();
     portal->ForcedDespawn();
     return true;
 }

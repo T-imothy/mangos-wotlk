@@ -159,6 +159,8 @@ void instance_icecrown_citadel::Initialize()
     m_bGunshipReloadPending = false;
     m_uiLightsHammerDamnedKills = 0;
     m_sLightsHammerDamnedGuids.clear();
+    m_sRimefangTrashGuids.clear();
+    m_sSpinestalkerTrashGuids.clear();
 
     for (bool& i : m_abAchievCriteria)
         i = false;
@@ -199,25 +201,39 @@ void instance_icecrown_citadel::DoHandleCitadelAreaTrigger(uint32 uiTriggerId, P
         }
         else
         {
-            if (!m_bHasRimefangLanded)
-            {
-                if (Creature* pRimefang = GetSingleCreatureFromStorage(NPC_RIMEFANG))
-                {
-                    pRimefang->AI()->AttackStart(pPlayer);
-                    m_bHasRimefangLanded = true;
-                }
-            }
-
-            if (!m_bHasSpinestalkerLanded)
-            {
-                if (Creature* pSpinestalker = GetSingleCreatureFromStorage(NPC_SPINESTALKER))
-                {
-                    pSpinestalker->AI()->AttackStart(pPlayer);
-                    m_bHasSpinestalkerLanded = true;
-                }
-            }
+            // This trigger is only a safety net. The retail progression is
+            // driven by clearing each frostwyrm's whelp group.
+            if (m_sRimefangTrashGuids.empty())
+                StartSindragosaFrostwyrm(NPC_RIMEFANG, pPlayer);
+            if (m_sSpinestalkerTrashGuids.empty())
+                StartSindragosaFrostwyrm(NPC_SPINESTALKER, pPlayer);
         }
     }
+}
+
+void instance_icecrown_citadel::StartSindragosaFrostwyrm(uint32 entry, Player* player)
+{
+    bool& landed = entry == NPC_RIMEFANG ? m_bHasRimefangLanded : m_bHasSpinestalkerLanded;
+    if (landed)
+        return;
+
+    if (!player)
+        player = GetPlayerInMap(true, false);
+
+    if (player)
+    {
+        if (Creature* frostwyrm = GetSingleCreatureFromStorage(entry))
+        {
+            frostwyrm->AI()->AttackStart(player);
+            landed = true;
+        }
+    }
+}
+
+void instance_icecrown_citadel::OpenSindragosaShortcut()
+{
+    DoUseOpenableObject(GO_SINDRAGOSA_SHORTCUT_ENTRANCE, true);
+    DoUseOpenableObject(GO_SINDRAGOSA_SHORTCUT_EXIT, true);
 }
 
 void instance_icecrown_citadel::OnPlayerEnter(Player* pPlayer)
@@ -251,6 +267,12 @@ void instance_icecrown_citadel::OnCreatureCreate(Creature* pCreature)
         case NPC_TIRION_LIGHTS_HAMMER:
         case NPC_RIMEFANG:
         case NPC_SPINESTALKER:
+        case NPC_CAPTAIN_ARNATH:
+        case NPC_CAPTAIN_BRANDON:
+        case NPC_CAPTAIN_GRONDEL:
+        case NPC_CAPTAIN_RUPERT:
+        case NPC_SISTER_SVALNA:
+        case NPC_CROK_SCOURGEBANE:
         case NPC_VALITHRIA_COMBAT_TRIGGER:
         case NPC_BLOOD_ORB_CONTROL:
         case NPC_PUTRICIDES_TRAP:
@@ -308,6 +330,17 @@ void instance_icecrown_citadel::OnCreatureCreate(Creature* pCreature)
                 m_leftScientistStalkerGuid = pCreature->GetObjectGuid();
             else
                 m_rightScientistStalkerGuid = pCreature->GetObjectGuid();
+            return;
+        case NPC_FROSTWING_WHELP:
+        {
+            float x, y, z;
+            pCreature->GetRespawnCoord(x, y, z);
+            if (y < 2484.35f)
+                m_sRimefangTrashGuids.insert(pCreature->GetObjectGuid());
+            else
+                m_sSpinestalkerTrashGuids.insert(pCreature->GetObjectGuid());
+            return;
+        }
     }
 }
 
@@ -340,6 +373,8 @@ void instance_icecrown_citadel::OnObjectCreate(GameObject* pGo)
         case GO_DEATHWHISPER_ELEVATOR:
             break;
         case GO_SAURFANG_DOOR:
+            if (m_auiEncounter[TYPE_DEATHBRINGER_SAURFANG] == DONE)
+                pGo->SetGoState(GO_STATE_ACTIVE);
             break;
         case GO_ALLIANCE_TELEPORTER:
             m_lFactionTeleporterGuids[TEAM_INDEX_ALLIANCE].push_back(pGo->GetObjectGuid());
@@ -367,6 +402,14 @@ void instance_icecrown_citadel::OnObjectCreate(GameObject* pGo)
             if (m_auiEncounter[TYPE_ROTFACE] == DONE)
                 pGo->SetGoState(GO_STATE_ACTIVE);
             break;
+        case GO_ORANGE_VALVE:
+            if (m_auiEncounter[TYPE_FESTERGUT] == DONE)
+                pGo->RemoveFlag(GAMEOBJECT_FLAGS, GO_FLAG_NO_INTERACT);
+            break;
+        case GO_GREEN_VALVE:
+            if (m_auiEncounter[TYPE_ROTFACE] == DONE)
+                pGo->RemoveFlag(GAMEOBJECT_FLAGS, GO_FLAG_NO_INTERACT);
+            break;
         case GO_SCIENTIST_DOOR_GREEN:
             // If both Festergut and Rotface are DONE, set as ACTIVE_ALTERNATIVE
             if (m_auiEncounter[TYPE_FESTERGUT] == DONE && m_auiEncounter[TYPE_ROTFACE] == DONE)
@@ -392,6 +435,15 @@ void instance_icecrown_citadel::OnObjectCreate(GameObject* pGo)
             break;
         case GO_GREEN_DRAGON_EXIT:
             if (m_auiEncounter[TYPE_VALITHRIA] == DONE)
+                pGo->SetGoState(GO_STATE_ACTIVE);
+            break;
+        case GO_SINDRAGOSA_ENTRANCE:
+            if (m_auiEncounter[TYPE_VALITHRIA] == DONE && m_auiEncounter[TYPE_SINDRAGOSA] != IN_PROGRESS)
+                pGo->SetGoState(GO_STATE_ACTIVE);
+            break;
+        case GO_SINDRAGOSA_SHORTCUT_ENTRANCE:
+        case GO_SINDRAGOSA_SHORTCUT_EXIT:
+            if (m_auiEncounter[TYPE_SINDRAGOSA] == DONE || (m_bHasRimefangLanded && m_bHasSpinestalkerLanded))
                 pGo->SetGoState(GO_STATE_ACTIVE);
             break;
         case GO_SAURFANG_CACHE:
@@ -429,18 +481,13 @@ void instance_icecrown_citadel::OnObjectCreate(GameObject* pGo)
         case GO_ARTHAS_PRECIPICE:
         case GO_MARROWGAR_DOOR:
         case GO_BLOODPRINCE_DOOR:
-        case GO_SINDRAGOSA_ENTRANCE:
         case GO_VALITHRIA_DOOR_1:
         case GO_VALITHRIA_DOOR_2:
         case GO_VALITHRIA_DOOR_3:
         case GO_VALITHRIA_DOOR_4:
         case GO_ICECROWN_GRATE:
-        case GO_SINDRAGOSA_SHORTCUT_ENTRANCE:
-        case GO_SINDRAGOSA_SHORTCUT_EXIT:
         case GO_ORANGE_PLAGUE:
         case GO_GREEN_PLAGUE:
-        case GO_ORANGE_VALVE:
-        case GO_GREEN_VALVE:
         case GO_DRINK_ME:
             break;
         case GO_PLAGUE_SIGIL:
@@ -461,7 +508,10 @@ void instance_icecrown_citadel::OnObjectCreate(GameObject* pGo)
             break;
         case GO_TRANSPORTER_UPPER_SPIRE:
             if (m_auiEncounter[TYPE_DEATHBRINGER_SAURFANG] == DONE)
+            {
                 pGo->SetGoState(GO_STATE_ACTIVE);
+                pGo->RemoveFlag(GAMEOBJECT_FLAGS, GO_FLAG_NO_INTERACT);
+            }
             break;
         case GO_TRANSPORTER_LIGHTS_HAMMER:
         case GO_TRANSPORTER_ORATORY_DAMNED:
@@ -604,8 +654,18 @@ void instance_icecrown_citadel::OnCreatureDeath(Creature* pCreature)
                         DoToggleGameObjectFlags(pOrb->GetObjectGuid(), GO_FLAG_NO_INTERACT, false);
                 }
             }
+            break;
         case NPC_SPIRE_FROSTWYRM:
             SetData(TYPE_SPIRE_FROSTWYRM, DONE);
+            break;
+        case NPC_SISTER_SVALNA:
+            SetData(TYPE_FROST_WING_ENTRANCE, DONE);
+            break;
+        case NPC_FROSTWING_WHELP:
+            if (m_sRimefangTrashGuids.erase(pCreature->GetObjectGuid()) && m_sRimefangTrashGuids.empty())
+                StartSindragosaFrostwyrm(NPC_RIMEFANG);
+            else if (m_sSpinestalkerTrashGuids.erase(pCreature->GetObjectGuid()) && m_sSpinestalkerTrashGuids.empty())
+                StartSindragosaFrostwyrm(NPC_SPINESTALKER);
             break;
         case NPC_SKYBREAKER:
             SetData(TYPE_GUNSHIP_BATTLE, m_uiTeam == HORDE ? DONE : FAIL);
@@ -831,15 +891,22 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
             m_auiEncounter[uiType] = uiData;
             if (uiData == DONE)
             {
-                DoUseDoorOrButton(GO_SAURFANG_DOOR);
+                // Persistently unlock the route into the Upper Spire.  Avoid a
+                // toggle here because the faction outro may already have used
+                // the door before the encounter state is saved.
+                DoUseOpenableObject(GO_SAURFANG_DOOR, true);
+                DoToggleGameObjectFlags(GO_TRANSPORTER_UPPER_SPIRE, GO_FLAG_NO_INTERACT, false);
+                if (GameObject* transporter = GetSingleGameObjectFromStorage(GO_TRANSPORTER_UPPER_SPIRE))
+                    transporter->SetGoState(GO_STATE_ACTIVE);
+
                 DoRespawnGameObject(GO_SAURFANG_CACHE, 60 * MINUTE);
                 DoToggleGameObjectFlags(GO_SAURFANG_CACHE, GO_FLAG_NO_INTERACT, false);
 
                 // spawn the Saurfang's ship for alliance only
                 if (m_uiTeam == ALLIANCE)
                 {
-                    TransportTemplate* const zeppelinHorde = sTransportMgr.GetTransportTemplate(GO_ZEPPELIN_HORDE);
-                    Transport::LoadTransport(*zeppelinHorde, instance, true);
+                    if (TransportTemplate* const zeppelinHorde = sTransportMgr.GetTransportTemplate(GO_ZEPPELIN_HORDE))
+                        Transport::LoadTransport(*zeppelinHorde, instance, true);
                 }
             }
             else if (uiData == IN_PROGRESS)
@@ -971,6 +1038,17 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
             break;
         case TYPE_LICH_KING:
             m_auiEncounter[uiType] = uiData;
+            if (uiData == FAIL || uiData == NOT_STARTED)
+            {
+                SetLichKingPlatformDamaged(false);
+                if (Creature* tirion = GetSingleCreatureFromStorage(NPC_TIRION_FORDRING))
+                    tirion->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+            }
+            else if (uiData == DONE)
+            {
+                if (Creature* tirion = GetSingleCreatureFromStorage(NPC_TIRION_FORDRING))
+                    tirion->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+            }
             break;
         case TYPE_BLOOD_WING_ENTRANCE:
             m_auiEncounter[uiType] = uiData;
@@ -980,7 +1058,7 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
         case TYPE_FROST_WING_ENTRANCE:
             m_auiEncounter[uiType] = uiData;
             if (uiData == DONE)
-                DoUseDoorOrButton(GO_GREEN_DRAGON_ENTRANCE);
+                DoUseOpenableObject(GO_GREEN_DRAGON_ENTRANCE, true);
             break;
         case TYPE_PLAGUE_WING_ENTRANCE:
             m_auiEncounter[uiType] = uiData;
@@ -1114,6 +1192,26 @@ bool instance_icecrown_citadel::CheckAchievementCriteriaMeet(uint32 uiCriteriaId
         case ACHIEV_CRIT_NAUSEA_10H:
         case ACHIEV_CRIT_NAUSEA_25H:
             return m_abAchievCriteria[TYPE_ACHIEV_NAUSEA];
+        case ACHIEV_CRIT_ORB_WHISPERER_10N:
+        case ACHIEV_CRIT_ORB_WHISPERER_25N:
+        case ACHIEV_CRIT_ORB_WHISPERER_10H:
+        case ACHIEV_CRIT_ORB_WHISPERER_25H:
+            return m_abAchievCriteria[TYPE_ACHIEV_ORB_WHISPERER];
+        case ACHIEV_CRIT_PORTAL_JOCKEY_10N:
+        case ACHIEV_CRIT_PORTAL_JOCKEY_25N:
+        case ACHIEV_CRIT_PORTAL_JOCKEY_10H:
+        case ACHIEV_CRIT_PORTAL_JOCKEY_25H:
+            return m_abAchievCriteria[TYPE_ACHIEV_PORTAL_JOCKEY];
+        case ACHIEV_CRIT_ALL_YOU_CAN_EAT_10N:
+        case ACHIEV_CRIT_ALL_YOU_CAN_EAT_25N:
+        case ACHIEV_CRIT_ALL_YOU_CAN_EAT_10V:
+        case ACHIEV_CRIT_ALL_YOU_CAN_EAT_25V:
+            return m_abAchievCriteria[TYPE_ACHIEV_ALL_YOU_CAN_EAT];
+        case ACHIEV_CRIT_FLU_SHOT_SHORTAGE_10N:
+        case ACHIEV_CRIT_FLU_SHOT_SHORTAGE_25N:
+        case ACHIEV_CRIT_FLU_SHOT_SHORTAGE_10H:
+        case ACHIEV_CRIT_FLU_SHOT_SHORTAGE_25H:
+            return m_abAchievCriteria[TYPE_ACHIEV_FLU_SHOT_SHORTAGE];
     }
 
     return false;
@@ -1272,6 +1370,27 @@ void instance_icecrown_citadel::ProcessEventNpcs(Player* pPlayer)
         {
             DoRespawnGameObject(guid, 24 * HOUR);
             DoUseDoorOrButton(guid);
+        }
+    }
+}
+
+void instance_icecrown_citadel::SetLichKingPlatformDamaged(bool damaged)
+{
+    uint32 const entries[] =
+    {
+        GO_FROSTY_WIND, GO_FROSTY_EDGE, GO_SNOW_EDGE,
+        GO_ARTHAS_PLATFORM, GO_ARTHAS_PRECIPICE
+    };
+
+    for (uint32 entry : entries)
+    {
+        if (GameObject* object = GetSingleGameObjectFromStorage(entry))
+        {
+            if (damaged)
+                object->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_DAMAGED | GO_FLAG_NODESPAWN);
+            else
+                object->RemoveFlag(GAMEOBJECT_FLAGS, GO_FLAG_DAMAGED);
+            object->SetGoState(damaged ? GO_STATE_ACTIVE : GO_STATE_READY);
         }
     }
 }

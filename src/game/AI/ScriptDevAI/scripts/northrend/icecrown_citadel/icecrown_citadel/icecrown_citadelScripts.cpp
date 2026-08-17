@@ -267,9 +267,12 @@ enum
 
     NPC_FLESH_EATING_INSECT         = 37782,
 
-    // NOTE: these numbers are quesswork
+    // The retail gauntlet advances after its one-minute insect phase.  Keep
+    // the kill counter as an early-completion safeguard when the full swarm
+    // has already been cleared.
     MAX_INSECT_PER_ROUND            = 8,
     TOTAL_INSECTS_PER_EVENT         = 100,
+    PUTRICIDE_TRAP_DURATION         = MINUTE * IN_MILLISECONDS,
 };
 
 /*#####
@@ -323,7 +326,7 @@ struct npc_putricides_trapAI : public ScriptedAI
     {
         m_uiInsectCounter = 0;
         m_uiSummonTimer = 1000;
-        m_uiEventTimer = 5 * MINUTE * IN_MILLISECONDS;
+        m_uiEventTimer = PUTRICIDE_TRAP_DURATION;
     }
 
     void MoveInLineOfSight(Unit* /*pWho*/) override { }
@@ -398,7 +401,8 @@ struct npc_putricides_trapAI : public ScriptedAI
                 m_uiSummonTimer -= uiDiff;
         }
 
-        // event can last max 5 min
+        // The swarm phase lasts one minute.  Surviving players advance the
+        // gauntlet; a wipe resets it through the existing FAIL path.
         if (m_uiEventTimer)
         {
             if (m_uiEventTimer <= uiDiff)

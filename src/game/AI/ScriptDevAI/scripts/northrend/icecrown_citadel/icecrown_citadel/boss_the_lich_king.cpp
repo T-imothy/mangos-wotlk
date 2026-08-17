@@ -16,7 +16,7 @@
 
 /* ScriptData
 SDName: boss_the_lich_king
-SD%Complete: 5%
+SD%Complete: 85%
 SDComment:
 SDCategory: Icecrown Citadel
 EndScriptData */
@@ -152,6 +152,8 @@ enum
     // Val'kyr Shadowguard
     SPELL_LIFE_SIPHON           = 73783,
     SPELL_VALKYR_CHARGE         = 74399,
+    SPELL_VALKYR_TARGET_SEARCH  = 69030,
+    SPELL_VALKYR_CARRY          = 74445,
     SPELL_HARVEST_SOUL_VEHICLE  = 68985,
     SPELL_EJECT_PASSENGERS      = 68576,
     SPELL_WINGS_OF_THE_DAMNED   = 74352,
@@ -162,6 +164,7 @@ enum
 
     // Vile Spirit and Wicked Spirit
     SPELL_SPIRIT_BURST_AURA     = 70502,
+    SPELL_VILE_SPIRIT_MOVE      = 70501,
 
     // Spirit Warden
     SPELL_DARK_HUNGER           = 69383,
@@ -191,6 +194,9 @@ enum
     NPC_TERENAS_FM_HEROIC       = 39217,
     NPC_WICKED_SPIRIT           = 39190,
     NPC_SPIRIT_BOMB             = 39189,
+    NPC_SHAMBLING_HORROR        = 37698,
+    NPC_VALKYR_SHADOWGUARD      = 36609,
+    NPC_VILE_SPIRIT             = 37799,
 };
 
 enum Phase
@@ -241,6 +247,12 @@ enum MiscData
     AREA_ID_THE_FROZEN_THRONE      = 4859,
 };
 
+enum TirionData
+{
+    GOSSIP_ACTION_START_LICH_KING = GOSSIP_ACTION_INFO_DEF + 1,
+    POINT_TIRION_INTRO = 20,
+};
+
 static const float fLichKingPosition[11][3] =
 {
     {458.59f, -2122.71f, 1040.86f},    // 0 Lich King Intro
@@ -283,10 +295,14 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
     uint32 m_uiHarvestSoulTimer;
     uint32 m_uiFrostmournePhaseTimer;
     uint32 m_uiVileSpiritsTimer;
+    uint32 m_uiEndingTimer;
+    uint8 m_uiEndingStep;
+    uint8 m_uiIntroStep;
+    ObjectGuid m_frostmourneTargetGuid;
+    GuidList m_frostmourneSummons;
 
     void Reset() override
     {
-        // TODO: handling phases "intro" and "one" and aggroing depending on resetting encounter
         m_uiPhase               = PHASE_INTRO;
 
         m_uiBerserkTimer        = 15 * MINUTE * IN_MILLISECONDS;
@@ -303,6 +319,16 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
         m_uiSoulReaperTimer     = 25000;
         m_uiHarvestSoulTimer    = 5000;
         m_uiVileSpiritsTimer    = 20000;
+        m_uiEndingTimer         = 0;
+        m_uiEndingStep          = 0;
+        m_uiIntroStep           = 0;
+        m_frostmourneTargetGuid.Clear();
+        m_frostmourneSummons.clear();
+
+        m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER);
+
+        if (m_pInstance)
+            m_pInstance->SetLichKingPlatformDamaged(false);
     }
 
     void Aggro(Unit* /*pWho*/) override
@@ -314,10 +340,111 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
         m_uiPhase = PHASE_ONE;
     }
 
+    void ReceiveAIEvent(AIEventType eventType, Unit*, Unit*, uint32) override
+    {
+        if (eventType != AI_EVENT_CUSTOM_A || m_uiPhase != PHASE_INTRO || m_uiIntroStep)
+            return;
+
+        if (m_pInstance)
+            m_pInstance->SetData(TYPE_LICH_KING, IN_PROGRESS);
+        m_uiIntroStep = 1;
+        m_uiPhaseTimer = 4000;
+        DoScriptText(SAY_INTRO_1, m_creature);
+        m_creature->SetStandState(UNIT_STAND_STATE_STAND);
+    }
+
     void KilledUnit(Unit* pWho) override
     {
         if (pWho->GetTypeId() == TYPEID_PLAYER)
             DoScriptText(urand(0, 1) ? SAY_SLAY_1 : SAY_SLAY_2, m_creature);
+    }
+
+    void JustSummoned(Creature* summon) override
+    {
+        switch (summon->GetEntry())
+        {
+            case NPC_SHAMBLING_HORROR:
+            case NPC_RAGING_SPIRIT:
+            case NPC_VALKYR_SHADOWGUARD:
+            case NPC_VILE_SPIRIT:
+                summon->SetInCombatWithZone();
+                break;
+            case NPC_ICE_SPHERE:
+            case NPC_DEFILE:
+            case NPC_SHADOW_TRAP:
+                summon->AI()->SetReactState(REACT_PASSIVE);
+                break;
+            case NPC_TERENAS_FM_NORMAL:
+            case NPC_TERENAS_FM_HEROIC:
+            case NPC_SPIRIT_WARDEN:
+            case NPC_SPIRIT_BOMB:
+                m_frostmourneSummons.push_back(summon->GetObjectGuid());
+                break;
+        }
+    }
+
+    void CleanupFrostmourneRoom()
+    {
+        for (GuidList::const_iterator itr = m_frostmourneSummons.begin(); itr != m_frostmourneSummons.end(); ++itr)
+            if (Creature* summon = m_creature->GetMap()->GetCreature(*itr))
+                summon->ForcedDespawn(1000);
+        m_frostmourneSummons.clear();
+        m_frostmourneTargetGuid.Clear();
+    }
+
+    void StartNormalFrostmourne(Player* target)
+    {
+        if (!target)
+            return;
+
+        m_frostmourneTargetGuid = target->GetObjectGuid();
+        target->CastSpell(target, SPELL_HARVEST_SOUL_TP_FM_N, TRIGGERED_OLD_TRIGGERED);
+        Creature* terenas = m_creature->SummonCreature(NPC_TERENAS_FM_NORMAL, 495.55f, -2517.01f, 1250.0f,
+            4.6993f, TEMPSPAWN_TIMED_OR_DEAD_DESPAWN, 65000);
+        Creature* warden = m_creature->SummonCreature(NPC_SPIRIT_WARDEN, 495.34f, -2529.98f, 1250.0f,
+            1.5592f, TEMPSPAWN_TIMED_OR_DEAD_DESPAWN, 65000);
+        if (terenas && warden)
+        {
+            terenas->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, target, terenas);
+            warden->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, terenas, warden);
+            terenas->SetInCombatWith(warden);
+            warden->SetInCombatWith(terenas);
+            terenas->AI()->AttackStart(warden);
+            warden->AI()->AttackStart(terenas);
+        }
+    }
+
+    void StartHeroicFrostmourne()
+    {
+        for (auto& playerRef : m_creature->GetMap()->GetPlayers())
+            if (Player* player = playerRef.getSource())
+                if (player->IsAlive() && !player->IsGameMaster())
+                    player->CastSpell(player, SPELL_HARVEST_SOUL_TP_FM_H, TRIGGERED_OLD_TRIGGERED);
+
+        Creature* terenas = m_creature->SummonCreature(NPC_TERENAS_FM_HEROIC, 495.71f, -2523.76f, 1250.0f,
+            0.0f, TEMPSPAWN_TIMED_DESPAWN, 50000);
+        if (terenas)
+            terenas->AI()->SendAIEvent(AI_EVENT_CUSTOM_B, m_creature, terenas);
+    }
+
+    void FinishNormalFrostmourne(bool success)
+    {
+        if (Player* target = m_creature->GetMap()->GetPlayer(m_frostmourneTargetGuid))
+        {
+            if (success)
+                target->CastSpell(target, SPELL_RESTORE_SOUL, TRIGGERED_OLD_TRIGGERED);
+            else
+                target->CastSpell(target, SPELL_DESTROY_SOUL, TRIGGERED_OLD_TRIGGERED);
+        }
+        CleanupFrostmourneRoom();
+    }
+
+    void ReturnHeroicFrostmournePlayers()
+    {
+        for (auto& playerRef : m_creature->GetMap()->GetPlayers())
+            if (Player* player = playerRef.getSource())
+                if (player->IsAlive() && !player->IsGameMaster())
+                    player->CastSpell(player, SPELL_RESTORE_SOUL_HEROIC, TRIGGERED_OLD_TRIGGERED);
     }
 
     void JustDied(Unit* /*pKiller*/) override
@@ -327,12 +454,12 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
 
         DoScriptText(SAY_OUTRO_14, m_creature);
 
-        DoCastSpellIfCan(nullptr, SPELL_PLAY_MOVIE);
-        // TODO: finish event, after around 8 seconds play cinematic
+        DoCastSpellIfCan(m_creature, SPELL_PLAY_MOVIE, CAST_TRIGGERED);
     }
 
     void JustReachedHome() override
     {
+        CleanupFrostmourneRoom();
         if (m_pInstance)
             m_pInstance->SetData(TYPE_LICH_KING, FAIL);
     }
@@ -350,26 +477,27 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                 {
                     DoScriptText(SAY_REMORSELESS_WINTER, m_creature);
 
-                    // TODO: not sure which spell in which phase
-                    // DoCastSpellIfCan(m_creature, SPELL_REMORSELESS_WINTER_1);
+                    DoCastSpellIfCan(m_creature, SPELL_REMORSELESS_WINTER_1);
 
                     m_uiPhase = PHASE_TRANSITION_ONE;
                     m_uiPhaseTimer          = 62000;
 
-                    // TODO: set phase initial timers
-                    // TODO: on heroic despawn Shadow Traps
+                    m_uiPainSufferingTimer = 6000;
+                    m_uiRagingSpiritTimer = 20000;
+                    m_uiIceSphereTimer = 6000;
                 }
                 else if (m_uiPhase == PHASE_RUNNING_WINTER_TWO)
                 {
                     DoScriptText(SAY_REMORSELESS_WINTER, m_creature);
 
-                    // TODO: not sure which spell in which phase
-                    // DoCastSpellIfCan(m_creature, SPELL_REMORSELESS_WINTER_2);
+                    DoCastSpellIfCan(m_creature, SPELL_REMORSELESS_WINTER_2);
 
                     m_uiPhase = PHASE_TRANSITION_TWO;
                     m_uiPhaseTimer          = 62000;
 
-                    // TODO: set phase initial timers
+                    m_uiPainSufferingTimer = 6000;
+                    m_uiRagingSpiritTimer = 15000;
+                    m_uiIceSphereTimer = 6000;
                 }
                 else if (m_uiPhase == PHASE_DEATH_AWAITS)
                 {
@@ -409,7 +537,33 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
         {
             case PHASE_INTRO:
             {
-                // wait until set in combat
+                if (!m_uiIntroStep)
+                    return;
+
+                if (m_uiPhaseTimer > uiDiff)
+                {
+                    m_uiPhaseTimer -= uiDiff;
+                    return;
+                }
+
+                switch (++m_uiIntroStep)
+                {
+                    case 2: DoScriptText(SAY_INTRO_2, m_creature); m_uiPhaseTimer = 9000; break;
+                    case 3: DoScriptText(SAY_INTRO_3, m_creature); m_uiPhaseTimer = 7000; break;
+                    case 4: DoScriptText(SAY_INTRO_4, m_creature); m_uiPhaseTimer = 13000; break;
+                    case 5:
+                        DoScriptText(SAY_INTRO_5, m_creature);
+                        if (Creature* tirion = m_pInstance ? m_pInstance->GetSingleCreatureFromStorage(NPC_TIRION_FORDRING) : nullptr)
+                            DoCastSpellIfCan(tirion, SPELL_ICE_LOCK, CAST_TRIGGERED);
+                        m_uiPhaseTimer = 2000;
+                        break;
+                    default:
+                        m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER);
+                        m_creature->SetInCombatWithZone();
+                        m_uiPhase = PHASE_ONE;
+                        DoScriptText(SAY_AGGRO, m_creature);
+                        break;
+                }
                 return;
             }
             case PHASE_ONE:
@@ -546,7 +700,8 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                 // Casting Quake spell - phase end timer
                 if (m_uiPhaseTimer < uiDiff)
                 {
-                    // TODO: destroy platform
+                    if (m_pInstance)
+                        m_pInstance->SetLichKingPlatformDamaged(true);
 
                     m_uiPhase = (m_uiPhase == PHASE_QUAKE_ONE ? PHASE_TWO : PHASE_THREE);
                     m_creature->GetMotionMaster()->Clear();
@@ -603,7 +758,8 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                 // Summon Val'kyr
                 if (m_uiValkyrTimer < uiDiff)
                 {
-                    if (DoCastSpellIfCan(m_creature, SPELL_SUMMON_VALKYR) == CAST_OK)
+                    uint32 valkyrSpell = m_pInstance && m_pInstance->Is25ManDifficulty() ? SPELL_SUMMON_VALKYRS : SPELL_SUMMON_VALKYR;
+                    if (DoCastSpellIfCan(m_creature, valkyrSpell) == CAST_OK)
                     {
                         DoScriptText(SAY_SUMMON_VALKYR, m_creature);
                         m_uiValkyrTimer = 50000;
@@ -626,7 +782,10 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                         DoScriptText(SAY_LAST_PHASE, m_creature);
                         m_uiPhase = PHASE_DEATH_AWAITS;
 
-                        // TODO: start ending event
+                        m_creature->AttackStop();
+                        m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER);
+                        m_uiEndingStep = 1;
+                        m_uiEndingTimer = 8000;
 
                         return;
                     }
@@ -671,16 +830,17 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                             DoScriptText(SAY_HARVEST_SOUL, m_creature);
                             m_uiHarvestSoulTimer = m_bIsHeroic ? 120000 : 70000;
 
-                            // TODO: prepare Frostmourne room - summon bombs and Tirion, or Tirion and the "bad spirit-guy"
-
                             if (m_bIsHeroic)
                             {
+                                StartHeroicFrostmourne();
                                 m_uiPhase = PHASE_IN_FROSTMOURNE;
                                 SetCombatMovement(false);
                                 m_creature->StopMoving();
                                 m_uiFrostmournePhaseTimer = 47000;
                                 m_uiDefileTimer = 1000;
                             }
+                            else
+                                StartNormalFrostmourne(static_cast<Player*>(pTarget));
                         }
                     }
                 }
@@ -706,6 +866,8 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                 // wait until they leave Frostmourne
                 if (m_uiFrostmournePhaseTimer < uiDiff)
                 {
+                    ReturnHeroicFrostmournePlayers();
+                    CleanupFrostmourneRoom();
                     m_uiPhase = PHASE_THREE;
                     if (m_creature->GetVictim())
                         m_creature->GetMotionMaster()->MoveChase(m_creature->GetVictim());
@@ -717,7 +879,42 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
             }
             case PHASE_DEATH_AWAITS:
             {
-                // wait for swift death
+                if (!m_uiEndingTimer || m_uiEndingTimer > uiDiff)
+                {
+                    if (m_uiEndingTimer)
+                        m_uiEndingTimer -= uiDiff;
+                    break;
+                }
+
+                switch (m_uiEndingStep++)
+                {
+                    case 1:
+                        DoScriptText(SAY_OUTRO_1, m_creature);
+                        if (Creature* tirion = m_pInstance ? m_pInstance->GetSingleCreatureFromStorage(NPC_TIRION_FORDRING) : nullptr)
+                            tirion->CastSpell(tirion, SPELL_LIGHTS_BLESSING, TRIGGERED_NONE);
+                        m_uiEndingTimer = 10000;
+                        break;
+                    case 2:
+                        DoScriptText(SAY_OUTRO_2, m_creature);
+                        DoCastSpellIfCan(m_creature, SPELL_THROW_FROSTMOURNE, CAST_TRIGGERED);
+                        m_uiEndingTimer = 8000;
+                        break;
+                    case 3:
+                        DoCastSpellIfCan(m_creature, SPELL_BROKEN_FROSTMOURNE, CAST_TRIGGERED);
+                        DoCastSpellIfCan(m_creature, SPELL_FROSTMOURNE_SPIRITS, CAST_TRIGGERED);
+                        m_uiEndingTimer = 10000;
+                        break;
+                    case 4:
+                        if (Creature* terenas = m_creature->SummonCreature(NPC_TENERAS_MENETHIL,
+                                fLichKingPosition[7][0], fLichKingPosition[7][1], fLichKingPosition[7][2], 0.0f,
+                                TEMPSPAWN_TIMED_DESPAWN, 60000))
+                            terenas->CastSpell(terenas, SPELL_MASS_RESURRECTION2, TRIGGERED_NONE);
+                        m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER);
+                        m_creature->SetHealth(m_creature->GetMaxHealth() / 10);
+                        m_creature->SetInCombatWithZone();
+                        m_uiEndingTimer = 0;
+                        break;
+                }
                 break;
             }
         }
@@ -734,11 +931,425 @@ struct PlayMovie : public SpellScript
     }
 };
 
+struct npc_terenas_frostmourne_iccAI : public ScriptedAI
+{
+    npc_terenas_frostmourne_iccAI(Creature* creature) : ScriptedAI(creature), m_bombTimer(3000),
+        m_failureTimer(60000), m_heroic(false), m_failed(false) { }
+
+    uint32 m_bombTimer;
+    uint32 m_failureTimer;
+    bool m_heroic;
+    bool m_failed;
+
+    void ReceiveAIEvent(AIEventType type, Unit*, Unit*, uint32) override
+    {
+        if (type == AI_EVENT_CUSTOM_A)
+        {
+            m_heroic = false;
+            DoCastSpellIfCan(m_creature, SPELL_LIGHTS_FAVOR, CAST_TRIGGERED);
+        }
+        else if (type == AI_EVENT_CUSTOM_B)
+        {
+            m_heroic = true;
+        }
+    }
+
+    void FailNormalRoom()
+    {
+        if (m_failed)
+            return;
+        m_failed = true;
+        if (instance_icecrown_citadel* instance = static_cast<instance_icecrown_citadel*>(m_creature->GetInstanceData()))
+            if (Creature* lichKing = instance->GetSingleCreatureFromStorage(NPC_LICH_KING))
+                if (boss_the_lich_king_iccAI* ai = dynamic_cast<boss_the_lich_king_iccAI*>(lichKing->AI()))
+                    ai->FinishNormalFrostmourne(false);
+    }
+
+    void DamageTaken(Unit*, uint32& damage, DamageEffectType, SpellEntry const*) override
+    {
+        if (damage >= m_creature->GetHealth())
+        {
+            damage = m_creature->GetHealth() > 1 ? m_creature->GetHealth() - 1 : 0;
+            if (!m_heroic)
+                FailNormalRoom();
+        }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (m_heroic)
+        {
+            if (m_bombTimer <= diff)
+            {
+                float angle = frand(0.0f, 2.0f * M_PI_F);
+                float distance = frand(5.0f, 35.0f);
+                m_creature->SummonCreature(NPC_SPIRIT_BOMB,
+                    495.7f + std::cos(angle) * distance, -2523.8f + std::sin(angle) * distance, 1250.0f,
+                    0.0f, TEMPSPAWN_TIMED_DESPAWN, 15000);
+                m_bombTimer = urand(1500, 2500);
+            }
+            else
+                m_bombTimer -= diff;
+            return;
+        }
+
+        if (m_failureTimer <= diff)
+        {
+            FailNormalRoom();
+            m_failureTimer = 0;
+            return;
+        }
+        m_failureTimer -= diff;
+
+        if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
+            return;
+        DoMeleeAttackIfReady();
+    }
+};
+
+struct npc_spirit_warden_iccAI : public ScriptedAI
+{
+    npc_spirit_warden_iccAI(Creature* creature) : ScriptedAI(creature), m_uiSoulRipTimer(12000) { }
+
+    void ReceiveAIEvent(AIEventType type, Unit* sender, Unit*, uint32) override
+    {
+        if (type == AI_EVENT_CUSTOM_A && sender)
+            AttackStart(sender);
+        DoCastSpellIfCan(m_creature, SPELL_DARK_HUNGER, CAST_TRIGGERED);
+    }
+
+    void JustDied(Unit*) override
+    {
+        if (instance_icecrown_citadel* instance = static_cast<instance_icecrown_citadel*>(m_creature->GetInstanceData()))
+            if (Creature* lichKing = instance->GetSingleCreatureFromStorage(NPC_LICH_KING))
+                if (boss_the_lich_king_iccAI* ai = dynamic_cast<boss_the_lich_king_iccAI*>(lichKing->AI()))
+                    ai->FinishNormalFrostmourne(true);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
+            return;
+        if (m_uiSoulRipTimer <= diff)
+        {
+            DoCastSpellIfCan(m_creature->GetVictim(), SPELL_SOUL_RIP);
+            m_uiSoulRipTimer = urand(23000, 27000);
+        }
+        else
+            m_uiSoulRipTimer -= diff;
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    uint32 m_uiSoulRipTimer;
+};
+
+struct npc_spirit_bomb_iccAI : public Scripted_NoMovementAI
+{
+    npc_spirit_bomb_iccAI(Creature* creature) : Scripted_NoMovementAI(creature), m_explodeTimer(5000) { }
+    uint32 m_explodeTimer;
+    void UpdateAI(uint32 diff) override
+    {
+        if (m_explodeTimer <= diff)
+        {
+            DoCastSpellIfCan(m_creature, SPELL_EXPLOSION, CAST_TRIGGERED);
+            m_creature->ForcedDespawn(1000);
+            m_explodeTimer = 0;
+        }
+        else
+            m_explodeTimer -= diff;
+    }
+};
+
+struct npc_tirion_fordring_tftAI : public ScriptedAI
+{
+    npc_tirion_fordring_tftAI(Creature* creature) : ScriptedAI(creature)
+    {
+        m_instance = static_cast<instance_icecrown_citadel*>(creature->GetInstanceData());
+    }
+
+    instance_icecrown_citadel* m_instance;
+
+    void Reset() override
+    {
+        if (!m_instance || m_instance->GetData(TYPE_LICH_KING) != DONE)
+            m_creature->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+    }
+
+    void MovementInform(uint32 type, uint32 point) override
+    {
+        if (type != POINT_MOTION_TYPE || point != POINT_TIRION_INTRO || !m_instance)
+            return;
+
+        if (Creature* lichKing = m_instance->GetSingleCreatureFromStorage(NPC_LICH_KING))
+            lichKing->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, m_creature, lichKing);
+    }
+};
+
+bool GossipHello_npc_tirion_fordring_tft(Player* player, Creature* creature)
+{
+    instance_icecrown_citadel* instance = static_cast<instance_icecrown_citadel*>(creature->GetInstanceData());
+    if (instance && instance->GetData(TYPE_LICH_KING) != DONE && !instance->IsEncounterInProgress())
+        player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "We are ready. Let us end this.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_START_LICH_KING);
+    player->SEND_GOSSIP_MENU(creature->GetEntry(), creature->GetObjectGuid());
+    return true;
+}
+
+bool GossipSelect_npc_tirion_fordring_tft(Player* player, Creature* creature, uint32, uint32 action)
+{
+    if (action != GOSSIP_ACTION_START_LICH_KING)
+        return false;
+
+    player->CLOSE_GOSSIP_MENU();
+    creature->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
+    creature->SetWalk(true);
+    creature->GetMotionMaster()->MovePoint(POINT_TIRION_INTRO, 489.297f, -2124.840f, 1040.857f);
+    return true;
+}
+
+struct npc_shambling_horror_iccAI : public ScriptedAI
+{
+    npc_shambling_horror_iccAI(Creature* creature) : ScriptedAI(creature) { Reset(); }
+    uint32 shockwaveTimer;
+    uint32 enrageTimer;
+    bool frenzied;
+
+    void Reset() override
+    {
+        shockwaveTimer = urand(20000, 25000);
+        enrageTimer = urand(11000, 14000);
+        frenzied = false;
+    }
+
+    void DamageTaken(Unit*, uint32& damage, DamageEffectType, SpellEntry const*) override
+    {
+        Difficulty difficulty = m_creature->GetMap()->GetDifficulty();
+        bool heroic = difficulty == RAID_DIFFICULTY_10MAN_HEROIC || difficulty == RAID_DIFFICULTY_25MAN_HEROIC;
+        if (!frenzied && heroic && m_creature->GetHealthPercent() <= 20.0f)
+        {
+            frenzied = true;
+            DoCastSpellIfCan(m_creature, SPELL_FRENZY, CAST_TRIGGERED);
+        }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
+            return;
+        if (shockwaveTimer <= diff) { if (DoCastSpellIfCan(m_creature, SPELL_SHOCKWAVE) == CAST_OK) shockwaveTimer = urand(20000, 25000); }
+        else shockwaveTimer -= diff;
+        if (enrageTimer <= diff) { if (DoCastSpellIfCan(m_creature, SPELL_ENRAGE) == CAST_OK) enrageTimer = urand(20000, 25000); }
+        else enrageTimer -= diff;
+        DoMeleeAttackIfReady();
+    }
+};
+
+struct npc_raging_spirit_iccAI : public ScriptedAI
+{
+    npc_raging_spirit_iccAI(Creature* creature) : ScriptedAI(creature) { Reset(); }
+    uint32 shriekTimer;
+    void Reset() override
+    {
+        shriekTimer = urand(12000, 15000);
+        DoCastSpellIfCan(m_creature, SPELL_PLAGUE_AVOIDANCE, CAST_TRIGGERED);
+        DoCastSpellIfCan(m_creature, SPELL_RAGING_SPIRIT_VISUAL, CAST_TRIGGERED);
+    }
+    void UpdateAI(uint32 diff) override
+    {
+        if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim()) return;
+        if (shriekTimer <= diff) { if (DoCastSpellIfCan(m_creature, SPELL_SOUL_SHRIEK) == CAST_OK) shriekTimer = urand(12000, 15000); }
+        else shriekTimer -= diff;
+        DoMeleeAttackIfReady();
+    }
+};
+
+struct npc_defile_iccAI : public ScriptedAI
+{
+    npc_defile_iccAI(Creature* creature) : ScriptedAI(creature) { Reset(); }
+    void Reset() override
+    {
+        SetCombatMovement(false);
+        m_creature->SetCanEnterCombat(false);
+        m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE);
+        DoCastSpellIfCan(m_creature, SPELL_DEFILE_AURA, CAST_TRIGGERED);
+    }
+};
+
+struct npc_vile_spirit_iccAI : public ScriptedAI
+{
+    npc_vile_spirit_iccAI(Creature* creature) : ScriptedAI(creature) { Reset(); }
+    uint32 activateTimer;
+    bool active;
+    void Reset() override
+    {
+        activateTimer = 15000;
+        active = false;
+        m_creature->SetLevitate(true);
+        m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE);
+        DoCastSpellIfCan(m_creature, SPELL_SPIRIT_BURST_AURA, CAST_TRIGGERED);
+    }
+    void UpdateAI(uint32 diff) override
+    {
+        if (!active)
+        {
+            if (activateTimer > diff) { activateTimer -= diff; return; }
+            active = true;
+            m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE);
+            if (Unit* target = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 0, uint32(0), SELECT_FLAG_PLAYER))
+                m_creature->GetMotionMaster()->MoveChase(target);
+        }
+        if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
+            m_creature->SetInCombatWithZone();
+    }
+};
+
+struct npc_shadow_trap_iccAI : public ScriptedAI
+{
+    npc_shadow_trap_iccAI(Creature* creature) : ScriptedAI(creature) { Reset(); }
+    uint32 armTimer;
+    void Reset() override
+    {
+        armTimer = 5000;
+        SetCombatMovement(false);
+        m_creature->SetCanEnterCombat(false);
+        m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE);
+        DoCastSpellIfCan(m_creature, SPELL_SHADOW_TRAP_VISUAL, CAST_TRIGGERED);
+    }
+    void UpdateAI(uint32 diff) override
+    {
+        if (!armTimer) return;
+        if (armTimer > diff) { armTimer -= diff; return; }
+        armTimer = 0;
+        DoCastSpellIfCan(m_creature, SPELL_SHADOW_TRAP_AURA, CAST_TRIGGERED);
+    }
+};
+
+struct npc_ice_sphere_iccAI : public ScriptedAI
+{
+    npc_ice_sphere_iccAI(Creature* creature) : ScriptedAI(creature) { Reset(); }
+    uint32 acquireTimer;
+    void Reset() override
+    {
+        acquireTimer = 1000;
+        SetCombatMovement(false);
+        m_creature->SetLevitate(true);
+        DoCastSpellIfCan(m_creature, SPELL_ICE_SPHERE_VISUAL, CAST_TRIGGERED);
+        DoCastSpellIfCan(m_creature, SPELL_ICE_BURST_AURA, CAST_TRIGGERED);
+    }
+    void UpdateAI(uint32 diff) override
+    {
+        if (!acquireTimer) return;
+        if (acquireTimer > diff) { acquireTimer -= diff; return; }
+        acquireTimer = 0;
+        m_creature->SetInCombatWithZone();
+        if (Unit* target = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 0, uint32(0), SELECT_FLAG_PLAYER))
+        {
+            DoCastSpellIfCan(target, SPELL_ICE_PULSE, CAST_TRIGGERED);
+            m_creature->GetMotionMaster()->MoveChase(target);
+        }
+    }
+};
+
+struct npc_valkyr_shadowguard_iccAI : public ScriptedAI
+{
+    npc_valkyr_shadowguard_iccAI(Creature* creature) : ScriptedAI(creature) { Reset(); }
+    uint32 grabTimer;
+    bool carrying;
+    void Reset() override
+    {
+        grabTimer = 2500;
+        carrying = false;
+        SetCombatMovement(false);
+        m_creature->SetLevitate(true);
+        DoCastSpellIfCan(m_creature, SPELL_WINGS_OF_THE_DAMNED, CAST_TRIGGERED);
+    }
+    void AttackStart(Unit*) override { }
+    void MovementInform(uint32 type, uint32 point) override
+    {
+        if (type == POINT_MOTION_TYPE && point == POINT_VALKYR_THROW)
+        {
+            DoCastSpellIfCan(m_creature, SPELL_EJECT_PASSENGERS, CAST_TRIGGERED);
+            m_creature->ForcedDespawn(1000);
+        }
+    }
+    void UpdateAI(uint32 diff) override
+    {
+        if (carrying) return;
+        if (grabTimer > diff) { grabTimer -= diff; return; }
+        grabTimer = 2000;
+        m_creature->SetInCombatWithZone();
+        if (Unit* target = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 1, uint32(0), SELECT_FLAG_PLAYER))
+        {
+            carrying = true;
+            DoCastSpellIfCan(target, SPELL_VALKYR_CARRY, CAST_TRIGGERED);
+            uint8 drop = urand(8, 9);
+            m_creature->GetMotionMaster()->MovePoint(POINT_VALKYR_THROW, fLichKingPosition[drop][0], fLichKingPosition[drop][1], fLichKingPosition[drop][2]);
+        }
+    }
+};
+
 void AddSC_boss_the_lich_king()
 {
     Script* pNewScript = new Script;
     pNewScript->Name = "boss_the_lich_king_icc";
     pNewScript->GetAI = &GetNewAIInstance<boss_the_lich_king_iccAI>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_tirion_fordring_tft";
+    pNewScript->GetAI = &GetNewAIInstance<npc_tirion_fordring_tftAI>;
+    pNewScript->pGossipHello = &GossipHello_npc_tirion_fordring_tft;
+    pNewScript->pGossipSelect = &GossipSelect_npc_tirion_fordring_tft;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_shambling_horror_icc";
+    pNewScript->GetAI = &GetNewAIInstance<npc_shambling_horror_iccAI>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_raging_spirit_icc";
+    pNewScript->GetAI = &GetNewAIInstance<npc_raging_spirit_iccAI>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_defile_icc";
+    pNewScript->GetAI = &GetNewAIInstance<npc_defile_iccAI>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_vile_spirit_icc";
+    pNewScript->GetAI = &GetNewAIInstance<npc_vile_spirit_iccAI>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_shadow_trap_icc";
+    pNewScript->GetAI = &GetNewAIInstance<npc_shadow_trap_iccAI>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_ice_sphere_icc";
+    pNewScript->GetAI = &GetNewAIInstance<npc_ice_sphere_iccAI>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_valkyr_shadowguard_icc";
+    pNewScript->GetAI = &GetNewAIInstance<npc_valkyr_shadowguard_iccAI>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_terenas_frostmourne_icc";
+    pNewScript->GetAI = &GetNewAIInstance<npc_terenas_frostmourne_iccAI>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_spirit_warden_icc";
+    pNewScript->GetAI = &GetNewAIInstance<npc_spirit_warden_iccAI>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_spirit_bomb_icc";
+    pNewScript->GetAI = &GetNewAIInstance<npc_spirit_bomb_iccAI>;
     pNewScript->RegisterSelf();
 
     RegisterSpellScript<PlayMovie>("spell_play_movie");
