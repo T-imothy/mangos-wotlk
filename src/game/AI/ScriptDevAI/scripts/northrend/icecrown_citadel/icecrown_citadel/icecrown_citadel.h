@@ -28,6 +28,15 @@ enum
     TYPE_PLAGUE_WING_ENTRANCE       = 14,
     TYPE_SPIRE_FROSTWYRM            = 15,
 
+    // Non-boss progression state. Kept outside the encounter array so the
+    // alternating Upper Spire frost jets do not count as a raid encounter.
+    DATA_COLDFLAME_JETS             = 100,
+    DATA_SINDRAGOSA_GAUNTLET        = 101,
+
+    // Native spawn group used to recover Valithria's four static starter
+    // archmages after a wipe or a world-server restart.
+    SPAWN_GROUP_VALITHRIA_STARTERS  = 6310000,
+
     // main boss entries
     NPC_LORD_MARROWGAR              = 36612,
     NPC_LADY_DEATHWHISPER           = 36855,
@@ -40,14 +49,15 @@ enum
     NPC_KELESETH                    = 37972,
     NPC_QUEEN_LANATHEL              = 37955,
     NPC_VALITHRIA                   = 36789,
+    NPC_THE_LICH_KING_VALITHRIA     = 38153,       // hidden controller which creates Valithria's reward cache
     NPC_SINDRAGOSA                  = 36853,
     NPC_LICH_KING                   = 36597,
 
     // boss-related and other NPCs
     NPC_COLDFLAME                   = 36672,
 
-    NPC_THE_DAMNED                  = 37011,        // Light's Hammer prologue
-    NPC_TIRION_LIGHTS_HAMMER        = 37119,
+    NPC_THE_DAMNED                 = 37011,        // Light's Hammer prologue
+    NPC_TIRION_LIGHTS_HAMMER       = 37119,
 
     NPC_DEATHWHISPER_SPAWN_STALKER  = 37947,        // Lady Deathwhisper stalkers
     NPC_DEATHWHISPER_CONTROLLER     = 37948,
@@ -80,6 +90,8 @@ enum
     NPC_KORKRON_REAVER              = 36957,
     NPC_KORKRON_SERGEANT            = 36960,
 
+    ITEM_GOBLIN_ROCKET_PACK         = 49278,
+
     NPC_OVERLORD_SAURFANG           = 37187,        // Saurfang intro / outro
     NPC_KORKRON_REAVER_RISE         = 37920,
     NPC_MURADIN_BRONZEBEARD         = 37200,
@@ -107,8 +119,25 @@ enum
     NPC_PUDDLE_STALKER              = 37013,        // related to Festergut and Rotface
     NPC_RIMEFANG                    = 37533,
     NPC_SPINESTALKER                = 37534,
+    NPC_FROSTWARDEN_HANDLER         = 37531,
+    NPC_FROSTWING_WHELP             = 37532,
+    NPC_SINDRAGOSA_GAUNTLET         = 37503,
+    NPC_NERUBAR_CHAMPION            = 37501,
+    NPC_NERUBAR_WEBWEAVER           = 37502,
+    NPC_NERUBAR_BROODLING           = 37232,
+    NPC_FROSTWARDEN_SORCERESS       = 37229,
+    NPC_FROSTWARDEN_WARRIOR         = 37228,
     NPC_OOZE_TENTACLE_STALKER       = 38308,        // accessories to Putricide
     NPC_SLIMY_TENTACLE_STALKER      = 38309,
+
+    // Frostwing Halls gauntlet
+    NPC_CAPTAIN_ARNATH              = 37122,
+    NPC_CAPTAIN_BRANDON             = 37123,
+    NPC_CAPTAIN_GRONDEL             = 37124,
+    NPC_CAPTAIN_RUPERT              = 37125,
+    NPC_SISTER_SVALNA               = 37126,
+    NPC_CROK_SCOURGEBANE            = 37129,
+    NPC_IMPALING_SPEAR              = 38248,
 
     // Blood wing entrance creatures
     NPC_DARFALLEN_NOBLE             = 37663,
@@ -118,12 +147,16 @@ enum
     NPC_EMPOWERING_ORB_STALKER      = 36934,
 
     // achievement types
-    MAX_SPECIAL_ACHIEV_CRITS        = 4,
+    MAX_SPECIAL_ACHIEV_CRITS        = 8,
 
     TYPE_ACHIEV_BONED               = 0,
     TYPE_ACHIEV_MADE_A_MESS         = 1,
     TYPE_ACHIEV_DANCES_OOZES        = 2,
     TYPE_ACHIEV_NAUSEA              = 3,
+    TYPE_ACHIEV_ORB_WHISPERER       = 4,
+    TYPE_ACHIEV_PORTAL_JOCKEY       = 5,
+    TYPE_ACHIEV_ALL_YOU_CAN_EAT     = 6,
+    TYPE_ACHIEV_FLU_SHOT_SHORTAGE   = 7,
 
     // GameObjects entries
     GO_ICEWALL_1                    = 201911,
@@ -197,15 +230,15 @@ enum
     GO_SAURFANG_CACHE_10_H          = 202238,
     GO_SAURFANG_CACHE_25_H          = 202241,
 
-    GO_GUNSHIP_ARMORY_A             = 201872,
-    GO_GUNSHIP_ARMORY_A_25          = 201873,
-    GO_GUNSHIP_ARMORY_A_10H         = 201874,
+    GO_GUNSHIP_ARMORY_A             = 201873,
+    GO_GUNSHIP_ARMORY_A_25          = 201874,
+    GO_GUNSHIP_ARMORY_A_10H         = 201872,
     GO_GUNSHIP_ARMORY_A_25H         = 201875,
 
-    GO_GUNSHIP_ARMORY_H             = 202177,
-    GO_GUNSHIP_ARMORY_H_25          = 202178,
-    GO_GUNSHIP_ARMORY_H_10H         = 202179,
-    GO_GUNSHIP_ARMORY_H_25H         = 202180,
+    GO_GUNSHIP_ARMORY_H             = 202178,
+    GO_GUNSHIP_ARMORY_H_25          = 202180,
+    GO_GUNSHIP_ARMORY_H_10H         = 202177,
+    GO_GUNSHIP_ARMORY_H_25H         = 202179,
 
     GO_DREAMWALKER_CACHE            = 201959,
     GO_DREAMWALKER_CACHE_25         = 202339,
@@ -223,6 +256,7 @@ enum
 
     // Area triggers
     AT_SINDRAGOSA_PLATFORM          = 5604,
+    AT_SINDRAGOSA_GAUNTLET          = 5623,
     AT_LIGHTS_HAMMER_INTRO_1        = 5611,
     AT_LIGHTS_HAMMER_INTRO_2        = 5612,
     AT_RAMPART_ALLIANCE             = 5628,
@@ -230,6 +264,8 @@ enum
     AT_RAMPART_HORDE                = 5630,
     AT_RAMPART_HORDE_2              = 5631,
     AT_PUTRICIDES_TRAP              = 5647,
+    AT_SHUTDOWN_FROST_JETS          = 5649,
+    AT_SAURFANG_PORTAL              = 5698,
     AT_DEATHWHISPER_INTRO           = 5709,
     AT_FROZEN_THRONE_TELE           = 5718,
     AT_MARROWGAR_INTRO              = 5732,
@@ -336,6 +372,7 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         bool IsEncounterInProgress() const override;
 
         void OnPlayerEnter(Player* pPlayer) override;
+        void OnPlayerLeave(Player* pPlayer) override;
         void OnCreatureCreate(Creature* pCreature) override;
         void OnObjectCreate(GameObject* pGo) override;
         void OnCreatureRespawn(Creature* pCreature) override;
@@ -365,6 +402,19 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         // Open Putricide door in a few seconds
         void DoPreparePutricideDoor() { m_uiPutricideValveTimer = 15000; }
 
+        // Frozen Throne platform state used by the Lich King transitions.
+        void SetLichKingPlatformDamaged(bool damaged);
+        void SetLichKingPlatformDestroyed();
+        void SetLichKingPlatformWarning(bool active);
+        void CleanupLichKingPlayer(Player* player, bool forceCombatStop = false);
+
+        // Frostwing whelps are split between the two frostwyrms. Each dragon
+        // lands only after its own trash group has been cleared.
+        void StartSindragosaFrostwyrm(uint32 entry, Player* player = nullptr);
+
+        void RespawnValithriaStarterPack();
+        void OpenSindragosaShortcut();
+
         void SetSpecialAchievementCriteria(uint32 uiType, bool bIsMet);
         bool CheckAchievementCriteriaMeet(uint32 uiCriteriaId, Player const* pSource, Unit const* pTarget = nullptr, uint32 uiMiscvalue1 = 0) const override;
 
@@ -386,12 +436,17 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
 
         uint32 m_uiTeam;                                    // Team of first entered player, used on the Gunship event
         uint32 m_uiPutricideValveTimer;
-        uint8 m_lightsHammerDamnedKills;
+        uint32 m_uiGunshipResetTimer;
+        uint32 m_uiGunshipVictoryTeleportTimer;
+        uint32 m_uiColdflameJetsState;
+        uint32 m_uiSindragosaGauntletState;
+        uint8 m_uiLightsHammerDamnedKills;
 
         bool m_bHasMarrowgarIntroYelled;
         bool m_bHasDeathwhisperIntroYelled;
         bool m_bHasRimefangLanded;
         bool m_bHasSpinestalkerLanded;
+        bool m_bGunshipReloadPending;
 
         ObjectGuid m_leftScientistStalkerGuid;
         ObjectGuid m_rightScientistStalkerGuid;
@@ -400,10 +455,12 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         GuidList m_lDeathwhisperCultistsGuids;
         GuidList m_lRotfaceUpperStalkersGuids;
         GuidList m_lFactionTeleporterGuids[PVP_TEAM_COUNT];
-        GuidSet m_lightsHammerDamnedGuids;
+        GuidSet m_sLightsHammerDamnedGuids;
         GuidSet m_sDarkfallenCreaturesLowerGuids;
         GuidSet m_sDarkfallenCreaturesLeftGuids;
         GuidSet m_sDarkfallenCreaturesRightGuids;
+        GuidSet m_sRimefangTrashGuids;
+        GuidSet m_sSpinestalkerTrashGuids;
 };
 
 #endif
