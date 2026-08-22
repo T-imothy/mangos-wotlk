@@ -28,6 +28,9 @@ enum
     TYPE_PLAGUE_WING_ENTRANCE       = 14,
     TYPE_SPIRE_FROSTWYRM            = 15,
 
+    // Non-encounter progression state for the alternating Upper Spire jets.
+    DATA_COLDFLAME_JETS             = 100,
+
     // main boss entries
     NPC_LORD_MARROWGAR              = 36612,
     NPC_LADY_DEATHWHISPER           = 36855,
@@ -225,6 +228,8 @@ enum
     AT_RAMPART_ALLIANCE             = 5628,
     AT_RAMPART_HORDE                = 5630,
     AT_PUTRICIDES_TRAP              = 5647,
+    AT_SHUTDOWN_FROST_JETS          = 5649,
+    AT_SAURFANG_PORTAL              = 5698,
     AT_DEATHWHISPER_INTRO           = 5709,
     AT_FROZEN_THRONE_TELE           = 5718,
     AT_MARROWGAR_INTRO              = 5732,
@@ -381,6 +386,7 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
 
         uint32 m_uiTeam;                                    // Team of first entered player, used on the Gunship event
         uint32 m_uiPutricideValveTimer;
+        uint32 m_coldflameJetsState;
 
         bool m_bHasMarrowgarIntroYelled;
         bool m_bHasDeathwhisperIntroYelled;
