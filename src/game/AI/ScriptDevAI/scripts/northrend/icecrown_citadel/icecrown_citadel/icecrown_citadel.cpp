@@ -132,6 +132,22 @@ enum
     SPELL_LK_FURY_NO_REZ            = 72351,
 
     POINT_GAUNTLET_LAND             = 1,
+
+    // Putricide encounter auras which can persist if the world server stops
+    // during an attempt.
+    SPELL_PUTRICIDE_UNBOUND_10N      = 70911,
+    SPELL_PUTRICIDE_UNBOUND_25N      = 72854,
+    SPELL_PUTRICIDE_UNBOUND_10H      = 72855,
+    SPELL_PUTRICIDE_UNBOUND_25H      = 72856,
+    SPELL_PUTRICIDE_MUTATED_10N      = 72451,
+    SPELL_PUTRICIDE_MUTATED_25N      = 72463,
+    SPELL_PUTRICIDE_MUTATED_10H      = 72671,
+    SPELL_PUTRICIDE_MUTATED_25H      = 72672,
+    SPELL_PUTRICIDE_SEARCHER         = 70917,
+    SPELL_PUTRICIDE_SICKNESS         = 70953,
+    SPELL_PUTRICIDE_PROTECTION       = 70955,
+    SPELL_PUTRICIDE_OOZE_VARIABLE    = 74118,
+    SPELL_PUTRICIDE_GAS_VARIABLE     = 74119,
 };
 
 namespace
@@ -767,6 +783,23 @@ void instance_icecrown_citadel::OnPlayerEnter(Player* pPlayer)
     // on login without disturbing another ICC encounter.
     if (m_auiEncounter[TYPE_LICH_KING] != IN_PROGRESS)
         CleanupLichKingPlayer(pPlayer);
+
+    if (m_auiEncounter[TYPE_PROFESSOR_PUTRICIDE] != IN_PROGRESS)
+    {
+        uint32 const putricideAuras[] =
+        {
+            SPELL_PUTRICIDE_UNBOUND_10N, SPELL_PUTRICIDE_UNBOUND_25N,
+            SPELL_PUTRICIDE_UNBOUND_10H, SPELL_PUTRICIDE_UNBOUND_25H,
+            SPELL_PUTRICIDE_MUTATED_10N, SPELL_PUTRICIDE_MUTATED_25N,
+            SPELL_PUTRICIDE_MUTATED_10H, SPELL_PUTRICIDE_MUTATED_25H,
+            SPELL_PUTRICIDE_SEARCHER, SPELL_PUTRICIDE_SICKNESS,
+            SPELL_PUTRICIDE_PROTECTION, SPELL_PUTRICIDE_OOZE_VARIABLE,
+            SPELL_PUTRICIDE_GAS_VARIABLE,
+        };
+
+        for (uint32 spellId : putricideAuras)
+            pPlayer->RemoveAurasDueToSpell(spellId);
+    }
 
     if (!m_uiTeam)                      // very first player to enter
     {
