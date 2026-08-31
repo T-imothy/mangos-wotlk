@@ -227,6 +227,7 @@ namespace MMAP
                 {
                     std::fill_n(&liquid_entry[0][0], 16 * 16, lheader.liquidType);
                     std::fill_n(&liquid_flags[0][0], 16 * 16, lheader.liquidFlags);
+                    liquid_type_loaded = true;
                 }
 
                 if (!(lheader.flags & MAP_LIQUID_NO_HEIGHT))
@@ -838,9 +839,7 @@ namespace MMAP
             float size;
             if (sscanf(buf, "%d %d,%d (%f %f %f) (%f %f %f) %f", &mid, &tx, &ty,
                 &p0[0], &p0[1], &p0[2], &p1[0], &p1[1], &p1[2], &size) != 10)
-            {
                 continue;
-            }
 
             if (mapID != mid || tileX != tx || tileY != ty)
                 continue;
