@@ -165,6 +165,14 @@ void Transport::LoadTransport(TransportTemplate const& transportTemplate, Map* m
     float z = startNode->z;
     float o = t->GetKeyFrames().begin()->InitialOrientation;
 
+    // Only create the transport on the continent partition containing its
+    // current start node. Map transitions will select the destination partition.
+    if (map->GetId() <= 1 && sMapMgr.GetContinentInstanceId(map->GetId(), x, y) != map->GetInstanceId())
+    {
+        delete t;
+        return;
+    }
+
     // If we someday decide to use the grid to track transports, here:
     t->SetMap(map);
 
@@ -295,7 +303,8 @@ void Transport::TeleportTransport(uint32 newMapid, float x, float y, float z, fl
     Map* oldMap = GetMap();
     Relocate(x, y, z);
 
-    bool mapChange = GetMapId() != newMapid;
+    uint32 const newInstanceId = sMapMgr.GetContinentInstanceId(newMapid, x, y);
+    bool const mapChange = GetMapId() != newMapid || GetInstanceId() != newInstanceId;
     bool playerPassenger = false;
 
     auto& passengers = GetPassengers();
@@ -358,6 +367,7 @@ void Transport::TeleportTransport(uint32 newMapid, float x, float y, float z, fl
         UpdateForMap(oldMap, false);
         Object::RemoveFromWorld();
         ResetMap();
+        SetLocationInstanceId(newInstanceId);
 
         Map* newMap = sMapMgr.CreateMap(newMapid, this);
         newMap->GetMessager().AddMessage([transport = this, playerPassenger](Map* map)
@@ -563,7 +573,15 @@ void Transport::Update(const uint32 diff)
             G3D::Vector3 pos, dir;
             m_currentFrame->Spline->evaluate_percent(m_currentFrame->Index, t, pos);
             m_currentFrame->Spline->evaluate_derivative(m_currentFrame->Index, t, dir);
-            UpdatePosition(pos.x, pos.y, pos.z, atan2(dir.y, dir.x) + M_PI);
+            float const orientation = atan2(dir.y, dir.x) + M_PI;
+            uint32 const partitionId = sMapMgr.GetContinentInstanceId(GetMapId(), pos.x, pos.y);
+            if (partitionId != GetInstanceId())
+            {
+                TeleportTransport(GetMapId(), pos.x, pos.y, pos.z, orientation);
+                return;
+            }
+
+            UpdatePosition(pos.x, pos.y, pos.z, orientation);
         }
         if (IsInWorld())
         {

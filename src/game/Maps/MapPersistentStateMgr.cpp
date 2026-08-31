@@ -36,6 +36,7 @@
 #include "Util/Util.h"
 
 INSTANTIATE_SINGLETON_1(MapPersistentStateManager);
+INSTANTIATE_CLASS_MUTEX(MapPersistentStateManager, std::recursive_mutex);
 
 static uint32 resetEventTypeDelay[MAX_RESET_EVENT_TYPE] = { 0,                      // not used
                                                             3600, 900, 300, 60,     // (seconds) normal and official timer delay to inform player about instance reset
@@ -671,6 +672,7 @@ MapPersistentStateManager::~MapPersistentStateManager()
 */
 MapPersistentState* MapPersistentStateManager::AddPersistentState(MapEntry const* mapEntry, uint32 instanceId, Difficulty difficulty, time_t resetTime, bool canReset, bool load /*=false*/, uint32 completedEncountersMask /*= 0*/)
 {
+    Guard guard(*this);
     difficulty = MapPersistentState::GetSaveDifficulty(difficulty, mapEntry);
 
     if (MapPersistentState* old_save = GetPersistentState(mapEntry->MapID, instanceId))
@@ -706,7 +708,7 @@ MapPersistentState* MapPersistentStateManager::AddPersistentState(MapEntry const
     else if (mapEntry->IsBattleGroundOrArena())
         state = new BattleGroundPersistentState(mapEntry->MapID, instanceId, difficulty);
     else
-        state = new WorldPersistentState(mapEntry->MapID);
+        state = new WorldPersistentState(mapEntry->MapID, instanceId);
 
     if (instanceId)
         m_instanceSaveByInstanceId[instanceId] = state;
@@ -718,6 +720,8 @@ MapPersistentState* MapPersistentStateManager::AddPersistentState(MapEntry const
 
 MapPersistentState* MapPersistentStateManager::GetPersistentState(uint32 mapId, uint32 instanceId)
 {
+    Guard guard(*this);
+
     if (instanceId)
     {
         PersistentStateMap::iterator itr = m_instanceSaveByInstanceId.find(instanceId);
@@ -743,6 +747,8 @@ void MapPersistentStateManager::DeleteInstanceFromDB(uint32 instanceid)
 
 void MapPersistentStateManager::RemovePersistentState(uint32 mapId, uint32 instanceId)
 {
+    Guard guard(*this);
+
     if (lock_instLists)
         return;
 
@@ -799,6 +805,8 @@ void MapPersistentStateManager::_DelHelper(DatabaseType& db, const char* fields,
 
 void MapPersistentStateManager::CleanupInstances()
 {
+    Guard guard(*this);
+
     BarGoLink bar(2);
     bar.step();
 
@@ -1034,6 +1042,8 @@ void MapPersistentStateManager::_ResetOrWarnAll(uint32 mapid, Difficulty difficu
 
 void MapPersistentStateManager::GetStatistics(uint32& numStates, uint32& numBoundPlayers, uint32& numBoundGroups)
 {
+    Guard guard(*this);
+
     numStates = 0;
     numBoundPlayers = 0;
     numBoundGroups = 0;
@@ -1105,16 +1115,13 @@ void MapPersistentStateManager::LoadCreatureRespawnTimes()
         if (!mapEntry)
             continue;
 
-        if (instanceId)                                     // In instance - mapId must be data->mapid and mapEntry must be Instanceable
-        {
-            if (mapId != data->mapid || !mapEntry->Instanceable())
-                continue;
-        }
-        else                                                // Not in instance, mapEntry must not be Instanceable
-        {
-            if (mapEntry->Instanceable())
-                continue;
-        }
+        if (!mapEntry->Instanceable() && data->mapid <= 1)
+            instanceId = sMapMgr.GetContinentInstanceId(data->mapid, data->posX, data->posY);
+
+        if (mapId != data->mapid)
+            continue;
+        if (mapEntry->Instanceable() && !instanceId)
+            continue;
 
         if (difficulty >= (!mapEntry->Instanceable() ? REGULAR_DIFFICULTY + 1 : (mapEntry->IsRaid() ? MAX_RAID_DIFFICULTY : MAX_DUNGEON_DIFFICULTY)))
             continue;
@@ -1175,16 +1182,13 @@ void MapPersistentStateManager::LoadGameobjectRespawnTimes()
         if (!mapEntry)
             continue;
 
-        if (instanceId)                                     // In instance - mapId must be data->mapid and mapEntry must be Instanceable
-        {
-            if (mapId != data->mapid || !mapEntry->Instanceable())
-                continue;
-        }
-        else                                                // Not in instance, mapEntry must not be Instanceable
-        {
-            if (mapEntry->Instanceable())
-                continue;
-        }
+        if (!mapEntry->Instanceable() && data->mapid <= 1)
+            instanceId = sMapMgr.GetContinentInstanceId(data->mapid, data->posX, data->posY);
+
+        if (mapId != data->mapid)
+            continue;
+        if (mapEntry->Instanceable() && !instanceId)
+            continue;
 
         if (difficulty >= (!mapEntry->Instanceable() ? REGULAR_DIFFICULTY + 1 : (mapEntry->IsRaid() ? MAX_RAID_DIFFICULTY : MAX_DUNGEON_DIFFICULTY)))
             continue;
