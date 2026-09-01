@@ -44,15 +44,17 @@ inline void dtCustomFree(void* ptr)
 namespace MMAP
 {
     typedef std::unordered_map<uint32, dtTileRef> MMapTileSet;
+    typedef std::unordered_map<std::thread::id, dtNavMeshQuery*> NavMeshThreadQuerySet;
     typedef std::unordered_map<std::thread::id, dtNavMeshQuery*> NavMeshGOQuerySet;
 
     // dummy struct to hold map's mmap data
     struct MMapData
     {
-        MMapData(dtNavMesh* mesh) : navMesh(mesh), navMeshQuery(nullptr), fullLoaded(false) {}
+        MMapData(dtNavMesh* mesh) : navMesh(mesh), fullLoaded(false) {}
         ~MMapData()
         {
-            dtFreeNavMeshQuery(navMeshQuery);
+            for (auto& threadQuery : navMeshQueries)
+                dtFreeNavMeshQuery(threadQuery.second);
 
             if (navMesh)
                 dtFreeNavMesh(navMesh);
@@ -60,8 +62,10 @@ namespace MMAP
 
         dtNavMesh* navMesh;
 
-        // we have to use single dtNavMeshQuery for every instance, since those are not thread safe
-        dtNavMeshQuery* navMeshQuery;       // mmap data in wotlk is already packed per instance id
+        // dtNavMeshQuery owns mutable search state and cannot be shared by map/bot workers.
+        // WotLK already stores a separate MMapData per instance, so keep one query per worker thread.
+        NavMeshThreadQuerySet navMeshQueries;
+        std::mutex navMeshQueriesMutex;
         MMapTileSet mmapLoadedTiles;        // maps [map grid coords] to [dtTile]
 
         bool fullLoaded;
@@ -106,7 +110,7 @@ namespace MMAP
             bool unloadMapInstance(uint32 mapId, uint32 instanceId);
             bool IsMMapTileLoaded(uint32 mapId, uint32 instanceId, uint32 x, uint32 y) const;
 
-            // the returned [dtNavMeshQuery const*] is NOT threadsafe
+            // The returned query belongs exclusively to the calling thread.
             dtNavMeshQuery const* GetNavMeshQuery(uint32 mapId, uint32 instanceId);
             dtNavMeshQuery const* GetModelNavMeshQuery(uint32 displayId);
             dtNavMesh const* GetNavMesh(uint32 mapId, uint32 instanceId);
