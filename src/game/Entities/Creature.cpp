@@ -2074,7 +2074,7 @@ void Creature::ApplyDynamicRespawnDelay(uint32& delay)
         return;
 
     DynamicRespawnRatesChecker check(this);
-    MaNGOS::PlayerWorker<DynamicRespawnRatesChecker> searcher(check);
+    MaNGOS::PlayerWorker<DynamicRespawnRatesChecker> searcher(this, check);
     Cell::VisitWorldObjects(this, searcher, checkRange);
 
     int32 playerCount = int32(check.GetCount()) - int32(sWorld.getConfig(CONFIG_UINT32_DYN_RESPAWN_PLAYERS_THRESHOLD));

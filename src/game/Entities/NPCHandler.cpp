@@ -642,7 +642,7 @@ void WorldSession::HandleStablePet(WorldPacket& recv_data)
         }
 
         CreatureInfo const* creatureInfo = ObjectMgr::GetCreatureTemplate(currentPet->Fetch()[1].GetUInt32());
-        if (!creatureInfo || !creatureInfo->isTameable())
+        if (!creatureInfo || !creatureInfo->isTameable(_player->CanTameExoticPets()))
         {
             _player->SendPetTameFailure(PETTAME_INVALIDCREATURE);
             SendStableResult(STABLE_ERR_STABLE);
@@ -772,7 +772,7 @@ void WorldSession::HandleUnstablePet(WorldPacket& recv_data)
         {
             Field* currentFields = currentPet->Fetch();
             CreatureInfo const* currentInfo = ObjectMgr::GetCreatureTemplate(currentFields[1].GetUInt32());
-            if (!currentInfo || !currentInfo->isTameable())
+            if (!currentInfo || !currentInfo->isTameable(_player->CanTameExoticPets()))
             {
                 CharacterDatabase.RollbackTransaction();
                 SendStableResult(STABLE_ERR_STABLE);
@@ -931,7 +931,7 @@ void WorldSession::HandleStableSwapPet(WorldPacket& recv_data)
 
         Field* currentFields = currentPet->Fetch();
         CreatureInfo const* currentInfo = ObjectMgr::GetCreatureTemplate(currentFields[1].GetUInt32());
-        if (!currentInfo || !currentInfo->isTameable())
+        if (!currentInfo || !currentInfo->isTameable(_player->CanTameExoticPets()))
         {
             SendStableResult(STABLE_ERR_STABLE);
             return;

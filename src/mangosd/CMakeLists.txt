@@ -96,6 +96,11 @@ if(WIN32)
 	  COMMAND ${CMAKE_COMMAND} -E copy_if_different \"${CMAKE_SOURCE_DIR}/src/game/PlayerBot/playerbot.conf.dist.in\" \"$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/playerbot.conf.dist\")
   endif()
 
+  if(BUILD_PLAYERBOTS)
+    add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
+	  COMMAND ${CMAKE_COMMAND} -E copy_if_different \"${playerbots_SOURCE_DIR}/playerbot/aiplayerbot.conf.dist.in.wotlk\" \"$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/aiplayerbot.conf.dist\")
+  endif()
+
   if(BUILD_AHBOT)
     add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
 	  COMMAND ${CMAKE_COMMAND} -E copy_if_different \"${CMAKE_SOURCE_DIR}/src/game/AuctionHouseBot/ahbot.conf.dist.in\" \"$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/ahbot.conf.dist\")

@@ -155,14 +155,6 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPacket& recv_data)
                 _player->ClearQuestShareInfo();
             else if (Player* pPlayer = ObjectAccessor::FindPlayer(_player->GetDividerGuid()))
             {
-                if (!_player->IsInMap(pPlayer) || _player->GetDistance(pPlayer) > 10.0f)
-                {
-                    pPlayer->SendPushToPartyResponse(_player, QUEST_PARTY_MSG_TOO_FAR);
-                    _player->GetPlayerMenu()->CloseGossip();
-                    _player->ClearQuestShareInfo();
-                    return;
-                }
-
                 pPlayer->SendPushToPartyResponse(_player, QUEST_PARTY_MSG_ACCEPT_QUEST);
                 _player->ClearQuestShareInfo();
             }
@@ -534,13 +526,6 @@ void WorldSession::HandleQuestConfirmAccept(WorldPacket& recv_data)
 
         if (!pOriginalPlayer)
         {
-            _player->ClearQuestShareInfo();
-            return;
-        }
-
-        if (!_player->IsInMap(pOriginalPlayer) || _player->GetDistance(pOriginalPlayer) > 10.0f)
-        {
-            pOriginalPlayer->SendPushToPartyResponse(_player, QUEST_PARTY_MSG_TOO_FAR);
             _player->ClearQuestShareInfo();
             return;
         }
