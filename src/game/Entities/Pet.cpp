@@ -874,7 +874,7 @@ void Pet::Unsummon(PetSaveMode mode, Unit* owner /*= nullptr*/, bool removeList 
     }
 
     if (isControlled())
-        if (owner->IsPlayer())
+        if (owner && owner->IsPlayer())
             static_cast<Player*>(owner)->RemoveControllable(this);
 
     if (removeList)
