@@ -29,7 +29,7 @@ if(BUILD_PLAYERBOTS)
     PlayerBots
     SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/modules/PlayerBots"
     GIT_REPOSITORY "https://github.com/T-imothy/playerbots.git"
-    GIT_TAG "7c2660cc209801c7f41e455dad146bdd9dd75bdb"
+    GIT_TAG "mantech-wotlk-arch2"
   )
 
   FetchContent_GetProperties(PlayerBots)
