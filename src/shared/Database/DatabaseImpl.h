@@ -151,7 +151,7 @@ Database::DelayQueryHolderPriority(Class* object, void (Class::*method)(QueryRes
 {
     ASYNC_DELAYHOLDER_BODY(holder)
     auto callback = std::bind(method, object, std::placeholders::_1, holder);
-    return holder->Execute(new MaNGOS::QueryCallback(std::move(callback)), GetQueryDelayThread(), m_pResultQueue, true);
+    return holder->Execute(new MaNGOS::QueryCallback(std::move(callback)), m_threadBody, m_pResultQueue, true);
 }
 
 template<class Class, typename ParamType1>
