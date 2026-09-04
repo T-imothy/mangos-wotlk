@@ -4070,7 +4070,7 @@ void Spell::SendSpellCooldown()
     if (m_spellInfo->HasAttribute(SPELL_ATTR_PASSIVE) || m_channelOnly)
         return;
 
-    // ManTech portable services use an explicit ten-minute item cooldown.
+    // ManTech portable services use an explicit persistent item cooldown.
     // Do not leave their cooldowns on hold: an on-hold cooldown is not
     // persisted at logout, which would let the item be reused after relogging.
     if (m_CastItem && (m_CastItem->GetEntry() == 90000 || m_CastItem->GetEntry() == 90001))
