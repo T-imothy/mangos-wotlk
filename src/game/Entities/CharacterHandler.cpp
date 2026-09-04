@@ -40,6 +40,7 @@
 #include "Calendar/Calendar.h"
 #include "AI/ScriptDevAI/ScriptDevAIMgr.h"
 #include "Anticheat/Anticheat.hpp"
+#include "Mails/ManTechPortableUtilityGrant.h"
 
 #ifdef BUILD_DEPRECATED_PLAYERBOT
 #include "PlayerBot/Base/PlayerbotMgr.h"
@@ -256,13 +257,18 @@ class CharacterHandler
             Player* player = session->GetPlayer();
             if (player)
             {
+                ManTechPortableUtilityGrant::GrantToCharacter(player->GetObjectGuid(), player);
                 player->CreatePlayerbotMgr();
                 player->GetPlayerbotMgr()->OnPlayerLogin(player);
                 sRandomPlayerbotMgr.OnPlayerLogin(player);
             }
 #else
             if (WorldSession* session = sWorld.FindSession(((LoginQueryHolder*)holder)->GetAccountId()))
+            {
                 session->HandlePlayerLogin((LoginQueryHolder*)holder);
+                if (Player* player = session->GetPlayer())
+                    ManTechPortableUtilityGrant::GrantToCharacter(player->GetObjectGuid(), player);
+            }
 #endif
         }
 #ifdef BUILD_DEPRECATED_PLAYERBOT
@@ -628,6 +634,7 @@ void WorldSession::HandleCharCreateOpcode(WorldPacket& recv_data)
 
     // Player created, save it now
     pNewChar->SaveToDB();
+    ManTechPortableUtilityGrant::GrantToCharacter(pNewChar->GetObjectGuid());
     charcount += 1;
 
     LoginDatabase.PExecute("DELETE FROM realmcharacters WHERE acctid= '%u' AND realmid = '%u'", GetAccountId(), realmID);

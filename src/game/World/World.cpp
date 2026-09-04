@@ -74,6 +74,7 @@
 #include "LFG/LFGMgr.h"
 #include "Vmap/GameObjectModel.h"
 #include "Spells/SpellStacking.h"
+#include "Mails/ManTechPortableUtilityGrant.h"
 
 #ifdef BUILD_AHBOT
  #include "AuctionHouseBot/AuctionHouseBot.h"
@@ -1665,6 +1666,8 @@ void World::SetInitialWorldSettings()
     auctionbot.Init();
 #endif
 #endif
+
+    ManTechPortableUtilityGrant::BackfillExistingCharacters();
 
     sLog.outString("---------------------------------------");
     sLog.outString("      CMANGOS: World initialized       ");

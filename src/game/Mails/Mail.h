@@ -242,6 +242,7 @@ class MailDraft
          * @param COD the amount to which the cod should be set.
          */
         MailDraft& SetCOD(uint32 COD) { m_COD = COD; return *this; }
+        MailDraft& SetGrantKey(std::string const& grantKey) { m_grantKey = grantKey; return *this; }
 
         void CloneFrom(MailDraft const& draft);
     public:                                                 // finishers
@@ -269,6 +270,7 @@ class MailDraft
         uint32 m_money;
         /// The cod amount of this MailDraft.
         uint32 m_COD;
+        std::string m_grantKey;                            ///< Optional ManTech one-time grant recorded atomically with this mail.
 };
 /**
  * Structure holding information about an item in the mail.
