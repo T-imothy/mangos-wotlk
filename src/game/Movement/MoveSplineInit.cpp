@@ -24,6 +24,8 @@
 #include "Maps/TransportSystem.h"
 #include "Entities/Transports.h"
 
+#include <cmath>
+
 namespace Movement
 {
     static thread_local uint32 splineCounter = 1;
@@ -80,6 +82,28 @@ namespace Movement
         // corrent first vertex
         args.path[0] = real_position;
         args.initialOrientation = real_position.orientation;
+
+        bool hasMovement = false;
+        Vector3 previous = args.path.front();
+        for (Vector3 const& point : args.path)
+        {
+            if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z))
+            {
+                sLog.outError("MoveSplineInit::Launch rejected non-finite path for %s", unit.GetGuidStr().c_str());
+                Stop(true);
+                return 0;
+            }
+
+            if ((point - previous).squaredMagnitude() > 0.0001f)
+                hasMovement = true;
+            previous = point;
+        }
+
+        if (!hasMovement && !pathEmpty && !args.flags.cyclic)
+        {
+            Stop(true);
+            return 0;
+        }
 
         args.flags.enter_cycle = args.flags.cyclic;
         uint32 moveFlags = unit.m_movementInfo.GetMovementFlags();
