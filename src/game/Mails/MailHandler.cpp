@@ -38,6 +38,7 @@
 #include "Server/Opcodes.h"
 #include "Chat/Chat.h"
 #include "Anticheat/Anticheat.hpp"
+#include "Util/Timer.h"
 
 #define MAX_INBOX_CLIENT_UI_CAPACITY 50
 
@@ -56,11 +57,31 @@ bool WorldSession::CheckMailBox(ObjectGuid guid) const
     // mailbox case
     else if (guid.IsGameObject())
     {
+        const uint32 now = WorldTimer::getMSTime();
+        if (guid == m_lastRejectedMailboxGuid &&
+            WorldTimer::getMSTimeDiff(m_lastRejectedMailboxTime, now) < 2000)
+        {
+            ++m_suppressedMailboxRetries;
+            return false;
+        }
+
         if (!GetPlayer()->GetGameObjectIfCanInteractWith(guid, GAMEOBJECT_TYPE_MAILBOX))
         {
+            if (m_suppressedMailboxRetries)
+            {
+                DEBUG_LOG("Suppressed %u duplicate mailbox retries for %s.", m_suppressedMailboxRetries,
+                    GetPlayer()->GetGuidStr().c_str());
+                m_suppressedMailboxRetries = 0;
+            }
+            m_lastRejectedMailboxGuid = guid;
+            m_lastRejectedMailboxTime = now;
             DEBUG_LOG("Mailbox %s not found or %s can't interact with him.", guid.GetString().c_str(), GetPlayer()->GetGuidStr().c_str());
             return false;
         }
+
+        m_lastRejectedMailboxGuid.Clear();
+        m_lastRejectedMailboxTime = 0;
+        m_suppressedMailboxRetries = 0;
     }
     // squire case
     else if (guid.IsAnyTypeCreature())

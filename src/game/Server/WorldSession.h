@@ -1118,6 +1118,12 @@ class WorldSession
         Messager<WorldSession> m_messager;
 
         std::atomic<uint32> m_currentPlayerLevel;
+
+        // Reject duplicate mailbox packets cheaply when the client keeps retrying
+        // a stale or out-of-range portable mailbox GUID.
+        mutable ObjectGuid m_lastRejectedMailboxGuid;
+        mutable uint32 m_lastRejectedMailboxTime = 0;
+        mutable uint32 m_suppressedMailboxRetries = 0;
 };
 #endif
 /// @}
