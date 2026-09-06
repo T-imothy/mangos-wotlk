@@ -621,7 +621,8 @@ struct ThaddiusCharge : public AuraScript
             uint32 buffAuraId = aura->GetId() == SPELL_POSITIVE_CHARGE ? SPELL_POSITIVE_CHARGE_BUFF : SPELL_NEGATIVE_CHARGE_BUFF;
             float range = 13.f; // Static value from DBC files. As the value is the same for both spells we can hardcode it instead of accessing is through sSpellRadiusStore
 
-            if (!aura->GetCaster()->IsAlive())
+            Unit* caster = aura->GetCaster();
+            if (!caster || !caster->IsAlive())
             {
                 target->RemoveAurasDueToSpell(buffAuraId);
                 return;

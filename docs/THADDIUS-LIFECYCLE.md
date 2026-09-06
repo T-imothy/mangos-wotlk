@@ -14,6 +14,8 @@ while an add was only feigning death. It now emits the existing per-era native
 broadcast text directly, retains fake death, health/flags/motion handling and
 the ten-second revival timer, and does not call an encounter-completion hook.
 GetOtherAdd also handles a missing instance before looking up its sibling.
+Wrath's periodic charge-buff callback also handles an unavailable aura caster
+using its existing dead-caster cleanup, instead of dereferencing a null pointer.
 No boss health, damage, timings, polarity rules or rewards are weakened.
 
 The shared testing checkout's tests/naxxramas_lifecycle_regression.py compiles
@@ -24,4 +26,3 @@ instance/sibling cases. It reproduced both prior state defects from pre-fix
 HEAD. Full native builds and in-client add revival/wipe/boss-death/doors still
 need separate verification; this is not complete Thaddius bot positioning.
 No DB/config changes or new diagnostics are required.
-
