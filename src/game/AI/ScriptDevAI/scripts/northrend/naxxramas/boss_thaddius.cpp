@@ -328,6 +328,8 @@ struct boss_thaddiusAddsAI : public BossAI
     Creature* GetOtherAdd() const
     // For Stalagg returns feugen, for Feugen returns stalagg
     {
+        if (!m_instance)
+            return nullptr;
         switch (m_creature->GetEntry())
         {
             case NPC_FEUGEN:  return m_instance->GetSingleCreatureFromStorage(NPC_STALAGG);
@@ -418,7 +420,9 @@ struct boss_thaddiusAddsAI : public BossAI
         m_creature->SetStandState(UNIT_STAND_STATE_DEAD);
         SetCombatScriptStatus(true);
 
-        JustDied(attacker);                                  // Texts
+        // This is a reversible phase-one fake death, not encounter completion.
+        // BossAI::JustDied would mark TYPE_THADDIUS DONE and unlock the wing.
+        DoBroadcastText(m_creature->GetEntry() == NPC_STALAGG ? SAY_STAL_DEATH : SAY_FEUG_DEATH, m_creature, attacker);
         ResetTimer(THADDIUS_ADD_REVIVE, 10s);
     }
 };
