@@ -413,16 +413,20 @@ struct SoulLeech : public AuraScript
             if (Aura* improvedSoulLeech = static_cast<Player*>(target)->GetKnownTalentRankAuraById(1889, EFFECT_INDEX_1)) // Improved Soul Leech
             {
                 uint32 selfId = 0, petId = 0;
-                switch (aura->GetId())
+                // The proc aura is Soul Leech; mana return depends on the
+                // separate Improved Soul Leech talent rank.
+                switch (improvedSoulLeech->GetId())
                 {
                     case 54117: selfId = 54300; petId = 54607; break;
                     case 54118: selfId = 59117; petId = 59118; break;
+                    default: return SPELL_AURA_PROC_OK;
                 }
+                const int32 replenishmentChance = improvedSoulLeech->GetAmount();
 
                 target->CastSpell(nullptr, selfId, TRIGGERED_IGNORE_GCD | TRIGGERED_IGNORE_CURRENT_CASTED_SPELL | TRIGGERED_HIDE_CAST_IN_COMBAT_LOG);
                 target->CastSpell(nullptr, petId, TRIGGERED_IGNORE_GCD | TRIGGERED_IGNORE_CURRENT_CASTED_SPELL | TRIGGERED_HIDE_CAST_IN_COMBAT_LOG);
 
-                if (roll_chance_i(improvedSoulLeech->GetAmount()))
+                if (roll_chance_i(replenishmentChance))
                     target->CastSpell(nullptr, 57669, TRIGGERED_IGNORE_GCD | TRIGGERED_IGNORE_CURRENT_CASTED_SPELL | TRIGGERED_HIDE_CAST_IN_COMBAT_LOG);
             }
         }
