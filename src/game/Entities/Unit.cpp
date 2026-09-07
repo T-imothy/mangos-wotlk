@@ -915,7 +915,7 @@ uint32 Unit::DealDamage(Unit* dealer, Unit* victim, uint32 damage, CleanDamage c
 
     if (dealer)
     {
-        if (cleanDamage->rageGained)
+        if (cleanDamage && cleanDamage->rageGained)
             static_cast<Player*>(dealer)->RewardRage(cleanDamage->rageGained, true);
     }
 
