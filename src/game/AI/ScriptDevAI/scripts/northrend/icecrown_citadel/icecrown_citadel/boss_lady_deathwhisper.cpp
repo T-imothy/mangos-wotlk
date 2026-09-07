@@ -129,11 +129,11 @@ struct boss_lady_deathwhisperAI : public CombatAI
 
     instance_icecrown_citadel* m_instance;
 
-    bool m_bIsHeroicMode;
+    bool m_bIsHeroicMode = false;
     bool m_bIsLeftSideSummon;
     bool m_bIsPhaseOne;
 
-    uint8 m_uiMindControlCount;
+    uint8 m_uiMindControlCount = 0;
 
     GuidList m_lCultistSpawnedGuidList;
     GuidVector m_vRightStalkersGuidVector;
@@ -146,6 +146,10 @@ struct boss_lady_deathwhisperAI : public CombatAI
 
         m_bIsPhaseOne = true;
         m_bIsLeftSideSummon = roll_chance_i(50);
+        m_lCultistSpawnedGuidList.clear();
+        m_vLeftStalkersGuidVector.clear();
+        m_vRightStalkersGuidVector.clear();
+        m_middleStalkerGuid.Clear();
     }
 
     void Aggro(Unit* /*who*/) override
@@ -222,6 +226,10 @@ struct boss_lady_deathwhisperAI : public CombatAI
     // Wrapper to help sort the summoning stalkers
     void DoSortSummoningStalkers(GuidList& lDeathwhisperStalkers)
     {
+        // Rebuild on every pull; stale GUIDs must not accumulate across wipes.
+        m_vLeftStalkersGuidVector.clear();
+        m_vRightStalkersGuidVector.clear();
+        m_middleStalkerGuid.Clear();
         CreatureList lRightStalkers;
         CreatureList lLeftStalkers;
 
@@ -336,13 +344,17 @@ struct boss_lady_deathwhisperAI : public CombatAI
     // Wrapper to handle the second phase start
     void DoStartSecondPhase()
     {
+        if (!m_bIsPhaseOne || !m_creature->IsAlive() || !m_creature->IsInCombat())
+            return;
+        m_bIsPhaseOne = false;
         DoScriptText(SAY_PHASE_TWO, m_creature);
         SetCombatMovement(true);
         SetMeleeEnabled(true);
 
         m_creature->SetWalk(false);
         m_creature->GetMotionMaster()->Clear(false, true);
-        m_creature->GetMotionMaster()->MoveChase(m_creature->GetVictim());
+        if (Unit* victim = m_creature->GetVictim())
+            m_creature->GetMotionMaster()->MoveChase(victim);
 
         // stop the summon on normal mode
         if (!m_bIsHeroicMode)
@@ -354,8 +366,6 @@ struct boss_lady_deathwhisperAI : public CombatAI
         ResetCombatAction(DEATHWHISPER_FROSTBOLT, 5000);
         ResetCombatAction(DEATHWHISPER_FROSTBOLT_VOLLEY, 20000);
         ResetCombatAction(DEATHWHISPER_SUMMON_SPIRIT, 20000);
-
-        m_bIsPhaseOne = false;
     }
 
     void ExecuteAction(uint32 action) override

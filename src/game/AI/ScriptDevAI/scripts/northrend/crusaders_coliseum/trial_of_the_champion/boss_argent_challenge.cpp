@@ -294,7 +294,7 @@ struct boss_paletressAI : public argent_champion_commonAI
         {
             if (Unit* pTarget = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 0))
             {
-                if (DoCastSpellIfCan(pTarget, SPELL_HOLY_SMITE))
+                if (DoCastSpellIfCan(pTarget, SPELL_HOLY_SMITE) == CAST_OK)
                     m_uiHolySmiteTimer = urand(1000, 2000);
             }
         }
@@ -305,7 +305,7 @@ struct boss_paletressAI : public argent_champion_commonAI
         {
             if (Unit* pTarget = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 0))
             {
-                if (DoCastSpellIfCan(pTarget, SPELL_HOLY_FIRE))
+                if (DoCastSpellIfCan(pTarget, SPELL_HOLY_FIRE) == CAST_OK)
                     m_uiHolyFireTimer = 25000;
             }
         }
@@ -314,7 +314,7 @@ struct boss_paletressAI : public argent_champion_commonAI
 
         if (m_uiHolyNovaTimer < uiDiff)
         {
-            if (DoCastSpellIfCan(m_creature, SPELL_HOLY_NOVA))
+            if (DoCastSpellIfCan(m_creature, SPELL_HOLY_NOVA) == CAST_OK)
                 m_uiHolyNovaTimer = urand(30000, 40000);
         }
         else
@@ -340,6 +340,16 @@ UnitAI* GetAI_boss_paletress(Creature* pCreature)
     return new boss_paletressAI(pCreature);
 }
 
+// 66862 / 67681: Radiance affects targets facing Eadric, rather than a
+// cone in front of Eadric. Apply the same target filter to damage and stun.
+struct EadricRadiance : public SpellScript
+{
+    bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex /*eff*/) const override
+    {
+        return target && spell->GetCaster() && target->HasInArc(spell->GetCaster(), 2.5f);
+    }
+};
+
 void AddSC_boss_argent_challenge()
 {
     Script* pNewScript = new Script;
@@ -351,4 +361,6 @@ void AddSC_boss_argent_challenge()
     pNewScript->Name = "boss_paletress";
     pNewScript->GetAI = &GetAI_boss_paletress;
     pNewScript->RegisterSelf();
+
+    RegisterSpellScript<EadricRadiance>("spell_eadric_radiance");
 }

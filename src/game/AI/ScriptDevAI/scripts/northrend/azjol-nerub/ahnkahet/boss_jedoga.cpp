@@ -103,14 +103,14 @@ struct boss_jedogaAI : public ScriptedAI
     instance_ahnkahet* m_pInstance;
     bool m_bIsRegularMode;
 
-    uint32 m_uiVisualTimer;
+    uint32 m_uiVisualTimer = 0;
     uint32 m_uiThundershockTimer;
     uint32 m_uiCycloneStrikeTimer;
     uint32 m_uiLightningBoltTimer;
     uint8 m_uiSacrificeCount;
     bool m_bSacrifice;
     bool m_bIsSacrificing;
-    bool m_bHasDoneIntro;
+    bool m_bHasDoneIntro = false;
 
     GuidList m_lVolunteerGuidList;
 

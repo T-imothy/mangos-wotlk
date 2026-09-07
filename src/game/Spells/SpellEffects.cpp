@@ -16,6 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include "Entities/PortableRepairVendor.h"
 #include "Common.h"
 #include "Database/DatabaseEnv.h"
 #include "Server/WorldPacket.h"
@@ -5947,6 +5948,8 @@ bool Spell::DoSummonWild(CreatureSummonPositions& list, SummonPropertiesEntry co
     MANGOS_ASSERT(!list.empty() && prop);
 
     uint32 creature_entry = m_spellInfo->EffectMiscValue[effIdx];
+    creature_entry = PortableRepairVendor::ResolveSummonEntry(
+        m_CastItem ? m_CastItem->GetEntry() : 0, m_spellInfo->Id, creature_entry);
     CreatureInfo const* cInfo = ObjectMgr::GetCreatureTemplate(creature_entry);
     if (!cInfo)
     {

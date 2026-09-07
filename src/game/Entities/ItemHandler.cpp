@@ -16,6 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include "Entities/PortableRepairVendor.h"
 #include "Common.h"
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
@@ -825,7 +826,7 @@ void WorldSession::SendListInventory(ObjectGuid vendorguid) const
                 ++count;
 
                 // reputation discount
-                uint32 price = (crItem->ExtendedCost == 0 || pProto->Flags2 & ITEM_FLAG2_DONT_IGNORE_BUY_PRICE) ? uint32(floor(pProto->BuyPrice * discountMod)) : 0;
+                uint32 price = (crItem->ExtendedCost == 0 || pProto->Flags2 & ITEM_FLAG2_DONT_IGNORE_BUY_PRICE) ? uint32(floor(PortableRepairVendor::GetBuyPrice(pCreature->GetEntry(), pProto->ItemId, pProto->BuyPrice) * discountMod)) : 0;
 
                 data << uint32(vendorslot + 1);             // client size expected counting from 1
                 data << uint32(pProto->ItemId);
