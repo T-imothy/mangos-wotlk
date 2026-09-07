@@ -773,6 +773,9 @@ struct StaticDisruption : public SpellScript
             if (Unit* utarget = caster->GetMap()->GetUnit(target.targetGUID))
                 unitList.push_back(utarget);
         }
+        // Target GUIDs can survive the despawn of every resolved unit.
+        if (unitList.empty())
+            return;
         unitList.sort(TargetDistanceOrderFarAway(caster));
         unitList.resize(std::min(uint32(unitList.size()), uint32(isRegularDifficulty ? 2 : 3)));
         std::vector targetVector(unitList.begin(), unitList.end());
