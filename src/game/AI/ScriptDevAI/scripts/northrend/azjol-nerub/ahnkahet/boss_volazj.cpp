@@ -193,8 +193,10 @@ struct boss_volazjAI : public ScriptedAI
 
     void SpellHitTarget(Unit* pTarget, const SpellEntry* pSpell) override
     {
-        if (pSpell->Id == SPELL_INSANITY && pTarget->GetTypeId() == TYPEID_PLAYER)
+        if (pSpell->Id == SPELL_INSANITY && pTarget && pTarget->GetTypeId() == TYPEID_PLAYER)
         {
+            if (m_uiInsanityIndex >= MAX_INSANITY_SPELLS || !pTarget->IsAlive())
+                return;
             // Apply this only for the first target hit
             if (!m_creature->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE))
             {
@@ -287,8 +289,22 @@ UnitAI* GetAI_boss_volazj(Creature* pCreature)
     return new boss_volazjAI(pCreature);
 }
 
+struct SummonVolazjVisage : public SpellScript
+{
+    uint32 GetPhaseMaskOverride(Spell* spell) const override
+    {
+        const uint32 id = spell->m_spellInfo->Id;
+        // Native summon property 1881 ignores the summoner's phase. Without
+        // this hook each visage is created in phase 1, outside its player's phase.
+        return id >= SPELL_SUMMON_VISAGE_1 && id <= SPELL_SUMMON_VISAGE_5 ?
+            (1u << (4 + id - SPELL_SUMMON_VISAGE_1)) : 1u;
+    }
+};
+
 void AddSC_boss_volazj()
 {
+    RegisterSpellScript<SummonVolazjVisage>("spell_summon_volazj_visage");
+
     Script* pNewScript = new Script;
     pNewScript->Name = "boss_volazj";
     pNewScript->GetAI = &GetAI_boss_volazj;

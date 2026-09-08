@@ -17,7 +17,7 @@
 /* ScriptData
 SDName: boss_scourgelord_tyrannus
 SD%Complete: 80
-SDComment: Overlord's Brand logic not impelemneted
+SDComment: Overlord's Brand requires spell script and proc-event bindings
 SDCategory: Pit of Saron
 EndScriptData */
 
@@ -40,6 +40,8 @@ enum
     // Tyrannus spells
     SPELL_FORCEFUL_SMASH                = 69155,
     SPELL_OVERLORDS_BRAND               = 69172,                // triggers 69189 and 69190 from target
+    SPELL_OVERLORDS_BRAND_DAMAGE        = 69189,
+    SPELL_OVERLORDS_BRAND_HEAL          = 69190,
     SPELL_UNHOLY_POWER                  = 69167,
     SPELL_MARK_OF_RIMEFANG              = 69275,
 
@@ -152,6 +154,17 @@ struct boss_tyrannusAI : public CombatAI
             m_instance->SetData(TYPE_TYRANNUS, FAIL);
     }
 
+    void SpellHitTarget(Unit* target, const SpellEntry* spell) override
+    {
+        // A cast being accepted does not guarantee that Mark reaches its target.
+        if (spell->Id != SPELL_MARK_OF_RIMEFANG || !target || !target->IsAlive() ||
+            !target->HasAura(SPELL_MARK_OF_RIMEFANG) || !m_instance ||
+            m_instance->GetData(TYPE_TYRANNUS) != IN_PROGRESS)
+            return;
+        if (Creature* rimefang = m_instance->GetSingleCreatureFromStorage(NPC_RIMEFANG))
+            SendAIEvent(AI_EVENT_CUSTOM_A, target, rimefang);
+    }
+
     void ExecuteAction(uint32 action) override
     {
         switch (action)
@@ -181,11 +194,6 @@ struct boss_tyrannusAI : public CombatAI
                     if (DoCastSpellIfCan(target, SPELL_MARK_OF_RIMEFANG) == CAST_OK)
                     {
                         DoScriptText(SAY_MARK, m_creature);
-                        if (m_instance)
-                        {
-                            if (Creature* rimefang = m_instance->GetSingleCreatureFromStorage(NPC_RIMEFANG))
-                                SendAIEvent(AI_EVENT_CUSTOM_A, target, rimefang);
-                        }
                         ResetCombatAction(action, urand(20000, 25000));
                     }
                 }
@@ -221,6 +229,12 @@ struct boss_rimefang_posAI : public CombatAI
 
     ObjectGuid m_hoarfrostTarget;
 
+    void Reset() override
+    {
+        CombatAI::Reset();
+        m_hoarfrostTarget.Clear();
+    }
+
     void MoveInLineOfSight(Unit* who) override
     {
         if (!m_instance || !who->IsPlayer())
@@ -254,7 +268,11 @@ struct boss_rimefang_posAI : public CombatAI
 
     void ReceiveAIEvent(AIEventType eventType, Unit* sender, Unit* invoker, uint32 /*miscValue*/) override
     {
-        if (eventType == AI_EVENT_CUSTOM_A && sender->GetEntry() == NPC_TYRANNUS)
+        if (eventType == AI_EVENT_CUSTOM_A && sender && invoker && m_instance &&
+            sender == m_instance->GetSingleCreatureFromStorage(NPC_TYRANNUS) &&
+            m_instance->GetData(TYPE_TYRANNUS) == IN_PROGRESS &&
+            invoker->IsAlive() && m_creature->IsInMap(invoker) &&
+            invoker->HasAura(SPELL_MARK_OF_RIMEFANG))
         {
             m_hoarfrostTarget = invoker->GetObjectGuid();
             ResetCombatAction(RIMEFANG_POS_HOARFROST, 1000);
@@ -273,15 +291,24 @@ struct boss_rimefang_posAI : public CombatAI
                 }
                 break;
             case RIMEFANG_POS_HOARFROST:
-                if (Unit* target = m_creature->GetMap()->GetUnit(m_hoarfrostTarget))
+            {
+                Unit* target = m_creature->GetMap()->GetUnit(m_hoarfrostTarget);
+                if (!target || !target->IsAlive() || !m_creature->IsInMap(target) ||
+                    !target->HasAura(SPELL_MARK_OF_RIMEFANG) || !m_instance ||
+                    m_instance->GetData(TYPE_TYRANNUS) != IN_PROGRESS)
                 {
-                    if (DoCastSpellIfCan(target, SPELL_HOARFROST) == CAST_OK)
-                    {
-                        DoScriptText(EMOTE_RIMEFANG_ICEBOLT, m_creature, target);
-                        DisableCombatAction(action);
-                    }
+                    m_hoarfrostTarget.Clear();
+                    DisableCombatAction(action);
+                    break;
+                }
+                if (DoCastSpellIfCan(target, SPELL_HOARFROST) == CAST_OK)
+                {
+                    DoScriptText(EMOTE_RIMEFANG_ICEBOLT, m_creature, target);
+                    m_hoarfrostTarget.Clear();
+                    DisableCombatAction(action);
                 }
                 break;
+            }
         }
     }
 };
@@ -301,10 +328,52 @@ struct spell_icy_blast : public SpellScript
         if (!caster)
             return;
 
+        const SpellEntry* blast = sSpellTemplate.LookupEntry<SpellEntry>(SPELL_ICY_BLAST_AURA);
+        const int32 lifetime = blast ? GetSpellDuration(blast) : 0;
+        if (lifetime <= 0)
+            return;
+
         float fX, fY, fZ;
         spell->m_targets.getDestination(fX, fY, fZ);
 
-        caster->SummonCreature(NPC_ICY_BLAST, fX, fY, fZ, 0, TEMPSPAWN_CORPSE_TIMED_DESPAWN, 30000);
+        // This passive actor never dies. A corpse timer leaves one actor behind
+        // after every cast; expire it with the native ground spell instead.
+        caster->SummonCreature(NPC_ICY_BLAST, fX, fY, fZ, 0, TEMPSPAWN_TIMED_DESPAWN, uint32(lifetime));
+    }
+};
+
+// 69172 - Overlord's Brand. The marked player's outgoing damage is copied
+// to Tyrannus's current victim; outgoing healing heals Tyrannus for 5.5 times
+// its amount. Native proc events include direct attacks, spells and periodic
+// ticks. No replacement PlayerAI or bot-specific combat hooks are needed.
+struct OverlordsBrand : public AuraScript
+{
+    bool OnCheckProc(Aura* aura, ProcExecutionData& data) const override
+    {
+        Unit* player = aura->GetTarget();
+        Unit* boss = aura->GetCaster();
+        return player && player->IsPlayer() && player->IsAlive() &&
+            !data.isVictim && data.source == player && data.damage &&
+            (!data.spellInfo || (data.spellInfo->Id != SPELL_OVERLORDS_BRAND_DAMAGE &&
+                data.spellInfo->Id != SPELL_OVERLORDS_BRAND_HEAL)) &&
+            boss && boss->GetEntry() == NPC_TYRANNUS && boss->IsAlive() &&
+            boss->IsInCombat() && player->IsInMap(boss);
+    }
+
+    SpellAuraProcResult OnProc(Aura* aura, ProcExecutionData& data) const override
+    {
+        // Recheck because the encounter or target may change during another proc.
+        if (!OnCheckProc(aura, data))
+            return SPELL_AURA_PROC_CANT_TRIGGER;
+        Unit* boss = aura->GetCaster();
+        Unit* target = data.isHeal ? boss : boss->GetVictim();
+        if (!target || !target->IsAlive() || !boss->IsInMap(target))
+            return SPELL_AURA_PROC_CANT_TRIGGER;
+        const uint64 amount = data.isHeal ? uint64(data.damage) * 11 / 2 : data.damage;
+        data.basepoints[EFFECT_INDEX_0] = int32(std::min<uint64>(amount, 0x7fffffff));
+        data.triggeredSpellId = data.isHeal ? SPELL_OVERLORDS_BRAND_HEAL : SPELL_OVERLORDS_BRAND_DAMAGE;
+        data.triggerTarget = target;
+        return SPELL_AURA_PROC_OK;
     }
 };
 
@@ -321,4 +390,5 @@ void AddSC_boss_tyrannus()
     pNewScript->RegisterSelf();
 
     RegisterSpellScript<spell_icy_blast>("spell_icy_blast");
+    RegisterSpellScript<OverlordsBrand>("spell_overlords_brand");
 }

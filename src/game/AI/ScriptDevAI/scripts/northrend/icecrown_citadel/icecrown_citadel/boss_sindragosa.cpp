@@ -17,12 +17,14 @@
 /* ScriptData
 SDName: boss_sindragosa
 SD%Complete: 80%
-SDComment: requires core support for ice blocks (spells and GO in LoS checking)
+SDComment: native Ice Tomb chain and model LOS implemented; complete fight validation remains required
 SDCategory: Icecrown Citadel
 EndScriptData */
 
 #include "AI/ScriptDevAI/include/sc_common.h"
 #include "icecrown_citadel.h"
+#include "Spells/Scripts/SpellScript.h"
+#include "Spells/SpellAuras.h"
 
 enum
 {
@@ -50,6 +52,7 @@ enum
     SPELL_FROST_AURA            = 70084,
     SPELL_FROST_BREATH          = 69649,
     SPELL_ICY_GRIP              = 70117,
+    SPELL_BLISTERING_COLD       = 70123,
     SPELL_PERMEATING_CHILL      = 70109,
     SPELL_UNCHAINED_MAGIC       = 69762,
 
@@ -158,9 +161,11 @@ struct boss_sindragosaAI : public ScriptedAI
     uint32 m_uiFrostBreathTimer;
     uint32 m_uiTailSmashTimer;
     uint32 m_uiIcyGripTimer;
+    uint32 m_uiBlisteringColdTimer;
     uint32 m_uiUnchainedMagicTimer;
     uint32 m_uiFrostBombTimer;
     uint32 m_uiIceTombSingleTimer;
+    bool m_airTombPending;
 
     void Reset() override
     {
@@ -171,8 +176,10 @@ struct boss_sindragosaAI : public ScriptedAI
         m_uiTailSmashTimer          = 20000;
         m_uiFrostBreathTimer        = 5000;
         m_uiIcyGripTimer            = 35000;
+        m_uiBlisteringColdTimer     = 0;
         m_uiIceTombSingleTimer      = 15000;
         m_uiUnchainedMagicTimer     = urand(15000, 30000);
+        m_airTombPending            = false;
     }
 
     void SetFlying(bool bIsFlying)
@@ -292,7 +299,7 @@ struct boss_sindragosaAI : public ScriptedAI
         {
             m_creature->SetOrientation(M_PI_F); // face the platform
             m_uiFrostBombTimer = 10000; // set initial Frost Bomb timer
-            DoCastSpellIfCan(m_creature, SPELL_ICE_TOMB);
+            m_airTombPending = true;
             m_uiPhase = SINDRAGOSA_PHASE_AIR;
         }
     }
@@ -326,6 +333,26 @@ struct boss_sindragosaAI : public ScriptedAI
                 m_uiBerserkTimer -= uiDiff;
         }
 
+        if (m_uiPhase == SINDRAGOSA_PHASE_GROUND || m_uiPhase == SINDRAGOSA_PHASE_THREE)
+        {
+            // Preserve the native Grip -> one-second pause -> Cold cast order.
+            // Rejected Cold casts retry instead of consuming the only attempt.
+            if (m_uiBlisteringColdTimer)
+            {
+                if (m_uiBlisteringColdTimer <= uiDiff)
+                {
+                    if (DoCastSpellIfCan(m_creature, SPELL_BLISTERING_COLD) == CAST_OK)
+                        m_uiBlisteringColdTimer = 0;
+                }
+                else m_uiBlisteringColdTimer -= uiDiff;
+                return;
+            }
+            if (const Spell* cast = m_creature->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+                if (cast->getState() != SPELL_STATE_FINISHED && cast->m_spellInfo &&
+                    (cast->m_spellInfo->Id == 70123 || cast->m_spellInfo->Id == 71047 ||
+                     cast->m_spellInfo->Id == 71048 || cast->m_spellInfo->Id == 71049)) return;
+        }
+
         switch (m_uiPhase)
         {
             case SINDRAGOSA_PHASE_THREE:
@@ -335,7 +362,7 @@ struct boss_sindragosaAI : public ScriptedAI
                 {
                     if (Unit* pTarget = m_creature->SelectAttackingTarget(ATTACKING_TARGET_RANDOM, 1, SPELL_ICE_TOMB_SINGLE, SELECT_FLAG_PLAYER))
                     {
-                        if (DoCastSpellIfCan(pTarget, SPELL_ICE_TOMB) == CAST_OK)
+                        if (DoCastSpellIfCan(pTarget, SPELL_ICE_TOMB_SINGLE) == CAST_OK)
                             m_uiIceTombSingleTimer = 15000;
                     }
                 }
@@ -418,6 +445,7 @@ struct boss_sindragosaAI : public ScriptedAI
                     if (DoCastSpellIfCan(m_creature, SPELL_ICY_GRIP) == CAST_OK)
                     {
                         m_uiIcyGripTimer = 70000;
+                        m_uiBlisteringColdTimer = 1000;
                         DoScriptText(SAY_BLISTERING_COLD, m_creature);
                     }
                 }
@@ -432,6 +460,16 @@ struct boss_sindragosaAI : public ScriptedAI
                 break;
             case SINDRAGOSA_PHASE_AIR:
             {
+                // Start the cover window only after the air-phase selector is
+                // accepted. A rejected cast must not consume the sole attempt
+                // or start dropping bombs before the beacon/tomb sequence.
+                if (m_airTombPending)
+                {
+                    if (DoCastSpellIfCan(m_creature, SPELL_ICE_TOMB) != CAST_OK)
+                        return;
+                    m_airTombPending = false;
+                }
+
                 // Phase One (ground)
                 if (m_uiPhaseTimer <= uiDiff)
                 {
@@ -824,17 +862,22 @@ struct mob_frost_bombAI : public ScriptedAI
         {
             if (m_uiFrostBombTimer <= uiDiff)
             {
-                if (m_pInstance)
+                Creature* sindragosa = m_pInstance ? m_pInstance->GetSingleCreatureFromStorage(NPC_SINDRAGOSA) : nullptr;
+                if (!sindragosa || !sindragosa->IsAlive() || m_pInstance->GetData(TYPE_SINDRAGOSA) != IN_PROGRESS)
                 {
-                    if (Creature* pSindragosa = m_pInstance->GetSingleCreatureFromStorage(NPC_SINDRAGOSA))
-                    {
-                        if (pSindragosa->AI()->DoCastSpellIfCan(m_creature, SPELL_FROST_BOMB_DMG) == CAST_OK)
-                        {
-                            m_creature->RemoveAurasDueToSpell(SPELL_FROST_BOMB_VISUAL);
-                            m_creature->ForcedDespawn(2000);
-                            m_uiFrostBombTimer = 0;
-                        }
-                    }
+                    m_uiFrostBombTimer = 0;
+                    m_creature->ForcedDespawn();
+                    return;
+                }
+
+                // The payload is caster-centered. Its marker must supply the origin
+                // and line of sight, while Sindragosa retains damage attribution.
+                if (m_creature->CastSpell(m_creature, SPELL_FROST_BOMB_DMG, TRIGGERED_OLD_TRIGGERED,
+                        nullptr, nullptr, sindragosa->GetObjectGuid()) == SPELL_CAST_OK)
+                {
+                    m_creature->RemoveAurasDueToSpell(SPELL_FROST_BOMB_VISUAL);
+                    m_creature->ForcedDespawn(2000);
+                    m_uiFrostBombTimer = 0;
                 }
             }
             else
@@ -847,6 +890,302 @@ UnitAI* GetAI_mob_frost_bomb(Creature* pCreature)
 {
     return new mob_frost_bombAI(pCreature);
 }
+
+// 36980 - Ice Tomb. The creature is attackable; the closed door supplies native LOS.
+struct npc_sindragosa_ice_tombAI : public Scripted_NoMovementAI
+{
+    npc_sindragosa_ice_tombAI(Creature* creature) : Scripted_NoMovementAI(creature), m_checkTimer(1000) {}
+
+    ObjectGuid m_prisonerGuid;
+    ObjectGuid m_blockGuid;
+    uint32 m_checkTimer;
+
+    void Reset() override {}
+    void AttackStart(Unit* /*target*/) override {}
+
+    bool Initialize(Player* prisoner)
+    {
+        Map* map = m_creature->GetMap();
+        GameObject* block = new GameObject;
+        if (!block->Create(0, map->GenerateLocalLowGuid(HIGHGUID_GAMEOBJECT), 201722, map,
+                prisoner->GetPhaseMask(), prisoner->GetPositionX(), prisoner->GetPositionY(),
+                prisoner->GetPositionZ(), prisoner->GetOrientation()))
+        {
+            delete block;
+            return false;
+        }
+
+        map->Add(block);
+        block->AIM_Initialize();
+        m_blockGuid = block->GetObjectGuid();
+        m_prisonerGuid = prisoner->GetObjectGuid();
+        return true;
+    }
+
+    void Release()
+    {
+        // Clear ownership before removing auras, which may invoke their own callbacks.
+        ObjectGuid prisonerGuid = m_prisonerGuid;
+        m_prisonerGuid.Clear();
+        if (Player* prisoner = m_creature->GetMap()->GetPlayer(prisonerGuid))
+        {
+            prisoner->RemoveAurasDueToSpell(70157);
+            prisoner->RemoveAurasDueToSpell(SPELL_ICE_TOMB_PROTECTION);
+            prisoner->RemoveAurasDueToSpell(71665);
+        }
+        if (GameObject* block = m_creature->GetMap()->GetGameObject(m_blockGuid))
+            block->Delete();
+        m_blockGuid.Clear();
+    }
+
+    void JustDied(Unit* /*killer*/) override { Release(); }
+    void SummonedCreatureDespawn(Creature* summon) override
+    {
+        if (summon == m_creature)
+            Release();
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (m_checkTimer > diff)
+        {
+            m_checkTimer -= diff;
+            return;
+        }
+        m_checkTimer = 1000;
+
+        Player* prisoner = m_creature->GetMap()->GetPlayer(m_prisonerGuid);
+        instance_icecrown_citadel* instance = dynamic_cast<instance_icecrown_citadel*>(m_creature->GetInstanceData());
+        if (!prisoner || !prisoner->IsAlive() || !prisoner->HasAura(70157) ||
+                !instance || instance->GetData(TYPE_SINDRAGOSA) != IN_PROGRESS)
+        {
+            Release();
+            m_creature->ForcedDespawn();
+            return;
+        }
+
+        // Air-phase prisoners start suffocating after the boss lands.
+        Creature* boss = instance->GetSingleCreatureFromStorage(NPC_SINDRAGOSA);
+        boss_sindragosaAI* ai = boss ? dynamic_cast<boss_sindragosaAI*>(boss->AI()) : nullptr;
+        if (ai && ai->m_uiPhase == SINDRAGOSA_PHASE_GROUND && !prisoner->HasAura(71665))
+            prisoner->CastSpell(prisoner, 71665, TRIGGERED_OLD_TRIGGERED);
+    }
+};
+
+UnitAI* GetAI_npc_sindragosa_ice_tomb(Creature* creature)
+{
+    return new npc_sindragosa_ice_tombAI(creature);
+}
+
+// 69712 (air selector), 69675 (explicit final-phase target).
+struct spell_sindragosa_ice_tomb_selector : public SpellScript
+{
+    void OnInit(Spell* spell) const override
+    {
+        if (spell->m_spellInfo->Id != SPELL_ICE_TOMB || !spell->GetCaster())
+            return;
+        Difficulty difficulty = spell->GetCaster()->GetMap()->GetDifficulty();
+        spell->SetMaxAffectedTargets(difficulty == RAID_DIFFICULTY_25MAN_HEROIC ? 6 :
+            difficulty == RAID_DIFFICULTY_25MAN_NORMAL ? 5 : 2);
+    }
+
+    bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex /*effect*/) const override
+    {
+        Unit* caster = spell->GetCaster();
+        return caster && target && target->IsPlayer() && target->IsAlive() && target != caster->GetVictim() &&
+            !target->HasAura(70126) && !target->HasAura(70157);
+    }
+
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effect) const override
+    {
+        if (effect == EFFECT_INDEX_0 && spell->GetCaster() && spell->GetUnitTarget())
+            spell->GetCaster()->CastSpell(spell->GetUnitTarget(), 70126, TRIGGERED_OLD_TRIGGERED);
+    }
+};
+
+// 70126 - The DBC's server-side trigger 70159 is supplied by this native callback.
+struct spell_sindragosa_frost_beacon : public AuraScript
+{
+    void OnPeriodicTrigger(Aura* aura, PeriodicTriggerData& data) const override
+    {
+        data.spellInfo = nullptr;
+        Unit* caster = aura->GetCaster();
+        Unit* target = aura->GetTarget();
+        instance_icecrown_citadel* instance = caster ? dynamic_cast<instance_icecrown_citadel*>(caster->GetInstanceData()) : nullptr;
+        if (!caster || !caster->IsAlive() || !target || !target->IsAlive() ||
+                !instance || instance->GetData(TYPE_SINDRAGOSA) != IN_PROGRESS)
+            return;
+        data.trueCaster = caster;
+        data.caster = caster;
+        data.target = target;
+        data.targetObject = target;
+        data.spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(70157);
+    }
+};
+
+// 70157 - One second after the native stun, create the attackable prison and LOS object.
+struct spell_sindragosa_ice_tomb_trap : public AuraScript, public SpellScript
+{
+    bool OnCheckTarget(const Spell* /*spell*/, Unit* target, SpellEffectIndex /*effect*/) const override
+    {
+        // Overlapping beacons must not refresh a prison and create a second
+        // tomb whose death could release another tomb's prisoner.
+        return target && target->IsPlayer() && target->IsAlive() && !target->HasAura(70157);
+    }
+
+    void OnPeriodicTrigger(Aura* aura, PeriodicTriggerData& data) const override
+    {
+        data.spellInfo = nullptr;
+        Unit* target = aura->GetTarget();
+        Creature* caster = dynamic_cast<Creature*>(aura->GetCaster());
+        instance_icecrown_citadel* instance = caster ? dynamic_cast<instance_icecrown_citadel*>(caster->GetInstanceData()) : nullptr;
+        if (!target || !target->IsPlayer())
+            return;
+
+        if (caster && caster->IsAlive() && target->IsAlive() && caster->GetMap() == target->GetMap() &&
+                instance && instance->GetData(TYPE_SINDRAGOSA) == IN_PROGRESS)
+        {
+            if (aura->GetAuraTicks() != 1)
+                return;
+            if (Creature* tomb = caster->SummonCreature(36980, target->GetPositionX(), target->GetPositionY(),
+                    target->GetPositionZ(), target->GetOrientation(), TEMPSPAWN_DEAD_DESPAWN, 0))
+            {
+                npc_sindragosa_ice_tombAI* ai = dynamic_cast<npc_sindragosa_ice_tombAI*>(tomb->AI());
+                if (ai && ai->Initialize(static_cast<Player*>(target)))
+                {
+                    target->CastSpell(target, SPELL_ICE_TOMB_PROTECTION, TRIGGERED_OLD_TRIGGERED);
+                    return;
+                }
+                tomb->ForcedDespawn();
+            }
+        }
+        // A failed summon must never leave an unbreakable permanent stun.
+        target->RemoveAurasDueToSpell(70157);
+    }
+
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (!apply && aura->GetEffIndex() == EFFECT_INDEX_2)
+        {
+            aura->GetTarget()->RemoveAurasDueToSpell(SPELL_ICE_TOMB_PROTECTION);
+            aura->GetTarget()->RemoveAurasDueToSpell(71665);
+        }
+    }
+};
+
+// Frost Bomb and Mystic Buffet must include the Ice Block model in LOS tests.
+// Ordinary spell targeting ignores M2 models, including this temporary cover.
+struct spell_sindragosa_ice_block_los : public SpellScript
+{
+    bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex /*effect*/) const override
+    {
+        Unit* caster = spell->GetCaster();
+        return caster && target && caster->IsWithinLOSInMap(target, false);
+    }
+};
+
+// 70117 - Icy Grip uses the native player jump spell, preserving its movement checks.
+struct spell_sindragosa_icy_grip : public SpellScript
+{
+    bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex /*effect*/) const override
+    {
+        return spell->GetCaster() && target && target->IsPlayer() && target->IsAlive() &&
+            target != spell->GetCaster()->GetVictim() && !target->HasAura(70126) && !target->HasAura(70157);
+    }
+
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effect) const override
+    {
+        if (effect == EFFECT_INDEX_0 && spell->GetCaster() && spell->GetUnitTarget())
+            spell->GetUnitTarget()->CastSpell(spell->GetCaster(), 70122, TRIGGERED_OLD_TRIGGERED);
+    }
+};
+
+// 69766 - Instability: only natural expiration releases the accumulated Backlash.
+struct spell_sindragosa_instability : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (apply || aura->GetEffIndex() != EFFECT_INDEX_0 || aura->GetRemoveMode() != AURA_REMOVE_BY_EXPIRE)
+            return;
+        Unit* target = aura->GetTarget();
+        Unit* caster = aura->GetCaster();
+        if (!target || !target->IsAlive() || !caster || !caster->IsAlive() || target->GetMap() != caster->GetMap())
+            return;
+        instance_icecrown_citadel* instance = dynamic_cast<instance_icecrown_citadel*>(target->GetInstanceData());
+        Creature* boss = instance ? instance->GetSingleCreatureFromStorage(NPC_SINDRAGOSA) : nullptr;
+        if (!boss || !boss->IsAlive() || !boss->IsInCombat() || instance->GetData(TYPE_SINDRAGOSA) != IN_PROGRESS)
+            return;
+        int32 damage = aura->GetAmount();
+        if (damage > 0)
+            target->CastCustomSpell(target, 69770, &damage, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED,
+                nullptr, aura, aura->GetCasterGuid());
+    }
+};
+
+// Classify the active native talent allocation without depending on either bot module.
+// 1 = healer, 2 = spell damage, 0 = an ineligible melee/ranged-weapon specialization.
+static uint32 SindragosaUnchainedRole(Player* player)
+{
+    if (player->getClass() == CLASS_MAGE || player->getClass() == CLASS_WARLOCK) return 2;
+    std::map<uint32, uint32> points;
+    for (const auto& entry : player->GetActiveTalents())
+    {
+        const PlayerTalent& talent = entry.second;
+        if (talent.state != PLAYERSPELL_REMOVED && talent.talentEntry)
+            points[talent.talentEntry->TalentTab] += talent.currentRank + 1;
+    }
+    uint32 tab = 0, most = 0;
+    for (const auto& tree : points)
+        if (tree.second > most) { tab = tree.first; most = tree.second; }
+    if (tab == 201 || tab == 202 || tab == 382 || tab == 262 || tab == 282) return 1;
+    if (player->getClass() == CLASS_PRIEST ||
+        (player->getClass() == CLASS_SHAMAN && tab != 263) ||
+        (player->getClass() == CLASS_DRUID && tab != 281)) return 2;
+    return 0;
+}
+
+// 69762 - Select up to 1/3 healers and fill the 2/6 total from spell damage.
+// Rank candidates using a per-cast seed, so repeated effect/target checks are stable.
+struct spell_sindragosa_unchained_magic : public SpellScript
+{
+    void OnInit(Spell* spell) const override { spell->SetScriptValue(urand(0, UINT32_MAX)); }
+
+    bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex /*effect*/) const override
+    {
+        Unit* caster = spell->GetCaster();
+        if (!caster || !target || !target->IsPlayer()) return false;
+        auto eligible = [caster](Player* player)
+        {
+            return player && player->IsAlive() && !player->IsGameMaster() && !player->IsBeingTeleported() &&
+                caster->IsWithinDistInMap(player, 200.0f) && !player->HasAura(70157);
+        };
+        Player* player = static_cast<Player*>(target);
+        if (!eligible(player)) return false;
+        const uint32 role = SindragosaUnchainedRole(player);
+        if (!role) return false;
+        auto rank = [spell](Player* candidate)
+        {
+            uint64 value = candidate->GetObjectGuid().GetRawValue() ^ spell->GetScriptValue();
+            value = (value ^ (value >> 30)) * 0xbf58476d1ce4e5b9ULL;
+            value = (value ^ (value >> 27)) * 0x94d049bb133111ebULL;
+            return value ^ (value >> 31);
+        };
+        uint32 healers = 0, ahead = 0;
+        const uint64 priority = rank(player);
+        for (const auto& reference : caster->GetMap()->GetPlayers())
+        {
+            Player* candidate = reference.getSource();
+            if (!eligible(candidate)) continue;
+            const uint32 candidateRole = SindragosaUnchainedRole(candidate);
+            if (candidateRole == 1) ++healers;
+            if (candidateRole == role && rank(candidate) < priority) ++ahead;
+        }
+        const Difficulty difficulty = caster->GetMap()->GetDifficulty();
+        const bool large = difficulty == RAID_DIFFICULTY_25MAN_NORMAL || difficulty == RAID_DIFFICULTY_25MAN_HEROIC;
+        const uint32 healerLimit = large ? 3 : 1;
+        return ahead < (role == 1 ? healerLimit : (large ? 6u : 2u) - std::min(healers, healerLimit));
+    }
+};
 
 void AddSC_boss_sindragosa()
 {
@@ -869,4 +1208,17 @@ void AddSC_boss_sindragosa()
     pNewScript->Name = "mob_frost_bomb";
     pNewScript->GetAI = &GetAI_mob_frost_bomb;
     pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
+    pNewScript->Name = "npc_sindragosa_ice_tomb";
+    pNewScript->GetAI = &GetAI_npc_sindragosa_ice_tomb;
+    pNewScript->RegisterSelf();
+
+    RegisterSpellScript<spell_sindragosa_icy_grip>("spell_sindragosa_icy_grip");
+    RegisterSpellScript<spell_sindragosa_instability>("spell_sindragosa_instability");
+    RegisterSpellScript<spell_sindragosa_unchained_magic>("spell_sindragosa_unchained_magic");
+    RegisterSpellScript<spell_sindragosa_ice_tomb_selector>("spell_sindragosa_ice_tomb_selector");
+    RegisterSpellScript<spell_sindragosa_frost_beacon>("spell_sindragosa_frost_beacon");
+    RegisterSpellScript<spell_sindragosa_ice_tomb_trap>("spell_sindragosa_ice_tomb_trap");
+    RegisterSpellScript<spell_sindragosa_ice_block_los>("spell_sindragosa_ice_block_los");
 }

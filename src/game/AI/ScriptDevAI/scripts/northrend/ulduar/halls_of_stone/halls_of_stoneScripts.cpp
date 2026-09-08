@@ -612,6 +612,24 @@ struct spell_shatter : public SpellScript
     }
 };
 
+// Shatter damage decreases with distance from the shattered player.
+// The native effect radius defines the falloff edge for both difficulties.
+struct spell_krystallus_shatter_damage : public SpellScript
+{
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        if (effIdx != EFFECT_INDEX_0) return;
+        Unit* caster = spell->GetAffectiveCaster();
+        Unit* target = spell->GetUnitTarget();
+        if (!caster || !target) return;
+        const float radius = GetSpellRadius(sSpellRadiusStore.LookupEntry(spell->m_spellInfo->EffectRadiusIndex[effIdx]));
+        if (radius <= 0.0f) return;
+        const float distance = caster->GetDistance2d(target->GetPositionX(), target->GetPositionY(), DIST_CALC_COMBAT_REACH);
+        if (distance > 1.0f)
+            spell->SetDamage(int32(spell->GetDamage() * std::max(0.0f, (radius - distance) / radius)));
+    }
+};
+
 /*######
 ## spell_petrifying_grip_aura - 50836
 ######*/
@@ -711,6 +729,7 @@ void AddSC_halls_of_stone()
     pNewScript->RegisterSelf();
 
     RegisterSpellScript<spell_shatter>("spell_shatter");
+    RegisterSpellScript<spell_krystallus_shatter_damage>("spell_krystallus_shatter_damage");
     RegisterSpellScript<spell_petrifying_grip_aura>("spell_petrifying_grip_aura");
     RegisterSpellScript<spell_carve_stone_aura>("spell_carve_stone_aura");
     RegisterSpellScript<spell_taunt_brann>("spell_taunt_brann");

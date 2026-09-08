@@ -796,7 +796,7 @@ struct SummonAlliesOfNature : public SpellScript
     void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
     {
         Unit* target = spell->GetUnitTarget();
-        if (target->GetEntry() == NPC_FREYA)
+        if (target && target->GetEntry() == NPC_FREYA && target->AI())
             target->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, spell->GetCaster(), target);
     }
 };

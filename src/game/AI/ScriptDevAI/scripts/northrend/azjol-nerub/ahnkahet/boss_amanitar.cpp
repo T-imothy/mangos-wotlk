@@ -32,7 +32,7 @@ enum
     SPELL_VENOM_BOLT_VOLLEY         = 57088,
     SPELL_ENTANGLING_ROOTS          = 57095,
     SPELL_MINI                      = 57055,
-    SPELL_REMOVE_MUSHROOM_POWER     = 57283,                // purpose unk - this spell may remove the Mini aura from all players
+    SPELL_REMOVE_MUSHROOM_POWER     = 57283,
 
     // Mushroom entries
     NPC_HEALTHY_MUSHROOM            = 30391,
@@ -67,9 +67,33 @@ struct boss_amanitarAI : public ScriptedAI
     uint32 m_uiRootsTimer;
     uint32 m_uiMiniTimer;
     uint32 m_uiMushroomTimer;
+    GuidList m_mushroomGuids;
+
+    void DespawnMushrooms()
+    {
+        // ForcedDespawn can synchronously notify this AI. Detach the list first.
+        GuidList mushrooms;
+        mushrooms.swap(m_mushroomGuids);
+        for (ObjectGuid guid : mushrooms)
+            if (Creature* mushroom = m_creature->GetMap()->GetCreature(guid))
+                mushroom->ForcedDespawn();
+    }
+
+    void RemoveMushroomAuras()
+    {
+        // Wipe/death cleanup must also reach dead players and players outside
+        // the cleanup spell's radius, without depending on a successful cast.
+        for (auto const& reference : m_creature->GetMap()->GetPlayers())
+            if (Player* player = reference.getSource())
+            {
+                player->RemoveAurasDueToSpell(SPELL_MINI);
+                player->RemoveAurasDueToSpell(SPELL_POTENT_FUNGUS);
+            }
+    }
 
     void Reset() override
     {
+        DespawnMushrooms();
         m_uiBashTimer       = urand(7000, 10000);
         m_uiVenomBoltTimer  = urand(10000, 15000);
         m_uiRootsTimer      = 20000;
@@ -91,6 +115,14 @@ struct boss_amanitarAI : public ScriptedAI
             m_pInstance->SetData(TYPE_AMANITAR, DONE);
 
         DoCastSpellIfCan(m_creature, SPELL_REMOVE_MUSHROOM_POWER, CAST_TRIGGERED);
+        RemoveMushroomAuras();
+        DespawnMushrooms();
+    }
+
+    void EnterEvadeMode() override
+    {
+        RemoveMushroomAuras();
+        ScriptedAI::EnterEvadeMode();
     }
 
     void JustReachedHome() override
@@ -101,6 +133,10 @@ struct boss_amanitarAI : public ScriptedAI
 
     void JustSummoned(Creature* pSummoned) override
     {
+        if (pSummoned->GetEntry() != NPC_POISONOUS_MUSHROOM && pSummoned->GetEntry() != NPC_HEALTHY_MUSHROOM)
+            return;
+
+        m_mushroomGuids.push_back(pSummoned->GetObjectGuid());
         if (pSummoned->GetEntry() == NPC_POISONOUS_MUSHROOM)
             pSummoned->CastSpell(pSummoned, SPELL_POISON_MUSHROOM_VISUAL, TRIGGERED_OLD_TRIGGERED);
         else if (pSummoned->GetEntry() == NPC_HEALTHY_MUSHROOM)
@@ -108,6 +144,11 @@ struct boss_amanitarAI : public ScriptedAI
 
         // ToDo: research if the mushrooms should have a grow effect!
         pSummoned->CastSpell(pSummoned, SPELL_MUSHROOM_FORM, TRIGGERED_OLD_TRIGGERED);
+    }
+
+    void SummonedCreatureDespawn(Creature* pSummoned) override
+    {
+        m_mushroomGuids.remove(pSummoned->GetObjectGuid());
     }
 
     void SummonedCreatureJustDied(Creature* pSummoned) override
@@ -227,6 +268,23 @@ struct spell_remove_mushroom_power : public AuraScript
     }
 };
 
+// 56648 - Potent Fungus. Consume the fungus to cancel Mini; an unaffected
+// player retains the normal buff. Run after all hit effects have been applied,
+// so removing the holder cannot unapply a modifier that has not run yet.
+struct spell_amanitar_potent_fungus : public SpellScript
+{
+    void OnHit(Spell* spell, SpellMissInfo missInfo) const override
+    {
+        Unit* target = spell->GetUnitTarget();
+        if (missInfo != SPELL_MISS_NONE || !target ||
+            !target->HasAura(SPELL_POTENT_FUNGUS, EFFECT_INDEX_0) || !target->HasAura(SPELL_MINI))
+            return;
+
+        target->RemoveAurasDueToSpell(SPELL_MINI);
+        target->RemoveAurasDueToSpell(SPELL_POTENT_FUNGUS);
+    }
+};
+
 void AddSC_boss_amanitar()
 {
     Script* pNewScript = new Script;
@@ -240,4 +298,5 @@ void AddSC_boss_amanitar()
     pNewScript->RegisterSelf();
 
     RegisterSpellScript<spell_remove_mushroom_power>("spell_remove_mushroom_power");
+    RegisterSpellScript<spell_amanitar_potent_fungus>("spell_amanitar_potent_fungus");
 }

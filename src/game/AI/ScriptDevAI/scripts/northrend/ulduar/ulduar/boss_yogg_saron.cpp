@@ -1659,12 +1659,13 @@ struct HodirsProtectiveGaze : AuraScript
         if (player->GetHealth() > uint32(remainingDamage))
             return;
         instance_ulduar* instance = dynamic_cast<instance_ulduar*>(player->GetMap()->GetInstanceData());
-        if (!instance)
+        if (!instance || instance->GetData(TYPE_YOGGSARON) != IN_PROGRESS)
             return;
         Creature* hodir = instance->GetSingleCreatureFromStorage(NPC_HODIR_HELPER);
-        if (!hodir)
-            return;
-        if (!hodir->AI())
+        // Area-aura charge removal propagates to the keeper. A second player
+        // can still have a stale copy until its next aura update; it must not
+        // consume another rescue during the shared 25-second cooldown.
+        if (!hodir || !hodir->IsAlive() || !hodir->AI() || aura->GetCaster() != hodir || !hodir->HasAura(64174))
             return;
         player->CastSpell(player, 64175, TRIGGERED_OLD_TRIGGERED, nullptr, aura, hodir->GetObjectGuid());
         hodir->AI()->ResetTimer(TIMER_HODIRS_PROTECTIVE_GAZE, 25s);
