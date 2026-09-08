@@ -93,6 +93,7 @@ enum IngvarActions
     INGVAR_ACTION_ROAR,
     INGVAR_ACTION_ENRAGE,
     INGVAR_ACTION_MAX,
+    INGVAR_ACTION_TRANSFORM,
 };
 
 /*######
@@ -107,6 +108,10 @@ struct boss_ingvarAI : public CombatAI
         AddCombatAction(INGVAR_ACTION_SMASH, 10000u, 15000u);
         AddCombatAction(INGVAR_ACTION_ROAR, 20000u);
         AddCombatAction(INGVAR_ACTION_ENRAGE, 10000u);
+        AddCustomAction(INGVAR_ACTION_TRANSFORM, true, [&]()
+        {
+            HandleTransform();
+        }, TIMER_COMBAT_COMBAT);
 
         m_isRegularMode = creature->GetMap()->IsRegularDifficulty();
     }
@@ -148,9 +153,11 @@ struct boss_ingvarAI : public CombatAI
         {
             uiDamage = 0;
 
-            DoScriptText(SAY_DEATH_FIRST, m_creature);
+            // A rejected summon must not leave the boss in an irreversible fake death.
+            if (DoCastSpellIfCan(m_creature, SPELL_SUMMON_BANSHEE, CAST_TRIGGERED) != CAST_OK)
+                return;
 
-            DoCastSpellIfCan(m_creature, SPELL_SUMMON_BANSHEE, CAST_TRIGGERED);
+            DoScriptText(SAY_DEATH_FIRST, m_creature);
             DoCastSpellIfCan(m_creature, SPELL_FEIGN_DEATH, CAST_TRIGGERED);
             m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SPAWNING);
             m_creature->RemoveAurasDueToSpell(m_isRegularMode ? SPELL_ENRAGE : SPELL_ENRAGE_H);
@@ -217,8 +224,12 @@ struct boss_ingvarAI : public CombatAI
 
     void ReceiveAIEvent(AIEventType eventType, Unit* pSender, Unit* /*pInvoker*/, uint32 uiMiscValue) override
     {
+        if (!pSender || pSender->GetSpawnerGuid() != m_creature->GetObjectGuid() ||
+            !m_creature->IsAlive() || !m_creature->IsInCombat())
+            return;
+
         // axe returned to owner
-        if (eventType == AI_EVENT_CUSTOM_A && pSender->GetEntry() == NPC_THROW_DUMMY)
+        if (eventType == AI_EVENT_CUSTOM_A && pSender->GetEntry() == NPC_THROW_DUMMY && m_bIsResurrected)
         {
             m_creature->SetVirtualItem(VIRTUAL_ITEM_SLOT_0, EQUIP_ID_AXE_UNDEAD);
 
@@ -228,25 +239,34 @@ struct boss_ingvarAI : public CombatAI
         }
         // transform event
         else if (eventType == AI_EVENT_CUSTOM_B && pSender->GetEntry() == NPC_ANNHYLDE)
+            HandleTransform();
+    }
+
+    void HandleTransform()
+    {
+        if (!m_bIsFakingDeath || m_bIsResurrected || !m_creature->IsAlive() || !m_creature->IsInCombat())
+            return;
+        if (DoCastSpellIfCan(m_creature, SPELL_TRANSFORM, CAST_TRIGGERED | CAST_AURA_NOT_PRESENT) != CAST_OK)
         {
-            DoCastSpellIfCan(m_creature, SPELL_TRANSFORM, CAST_TRIGGERED | CAST_AURA_NOT_PRESENT);
-
-            DoScriptText(SAY_AGGRO_SECOND, m_creature);
-
-            ResetCombatAction(INGVAR_ACTION_ROAR, 1000);            // roar immediately after transformation
-            ResetCombatAction(INGVAR_ACTION_SMASH, 10000);
-            ResetCombatAction(INGVAR_ACTION_CLEAVE, 10000);
-            ResetCombatAction(INGVAR_ACTION_ENRAGE, 20000);
-
-            m_creature->SetVirtualItem(VIRTUAL_ITEM_SLOT_0, EQUIP_ID_AXE_UNDEAD);
-            m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SPAWNING);
-            m_creature->RemoveAurasDueToSpell(SPELL_FEIGN_DEATH);
-            SetCombatScriptStatus(false);
-            DoResetThreat();
-
-            m_bIsResurrected = true;
-            m_bIsFakingDeath = false;
+            ResetTimer(INGVAR_ACTION_TRANSFORM, 500u);
+            return;
         }
+
+        DoScriptText(SAY_AGGRO_SECOND, m_creature);
+
+        ResetCombatAction(INGVAR_ACTION_ROAR, 1000);            // roar immediately after transformation
+        ResetCombatAction(INGVAR_ACTION_SMASH, 10000);
+        ResetCombatAction(INGVAR_ACTION_CLEAVE, 10000);
+        ResetCombatAction(INGVAR_ACTION_ENRAGE, 20000);
+
+        m_creature->SetVirtualItem(VIRTUAL_ITEM_SLOT_0, EQUIP_ID_AXE_UNDEAD);
+        m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SPAWNING);
+        m_creature->RemoveAurasDueToSpell(SPELL_FEIGN_DEATH);
+        SetCombatScriptStatus(false);
+        DoResetThreat();
+
+        m_bIsResurrected = true;
+        m_bIsFakingDeath = false;
     }
 
     void ExecuteAction(uint32 action) override
@@ -362,34 +382,49 @@ struct npc_annhyldeAI : public ScriptedAI
         {
             if (m_uiResurrectTimer <= uiDiff)
             {
-                if (!m_pInstance)
+                if (!m_pInstance || m_pInstance->GetData(TYPE_INGVAR) != IN_PROGRESS)
+                {
+                    m_uiResurrectTimer = 0;
+                    m_creature->ForcedDespawn();
                     return;
+                }
+                Creature* ingvar = m_pInstance->GetSingleCreatureFromStorage(NPC_INGVAR);
+                if (!ingvar || !ingvar->IsAlive())
+                {
+                    m_uiResurrectTimer = 500;
+                    return;
+                }
 
                 switch (m_uiResurrectPhase)
                 {
                     case 0:
-                        DoCastSpellIfCan(m_creature, SPELL_SCOURGE_RES_CHANNEL);
-                        if (Creature* pIngvar = m_pInstance->GetSingleCreatureFromStorage(NPC_INGVAR))
+                        if (DoCastSpellIfCan(m_creature, SPELL_SCOURGE_RES_CHANNEL) != CAST_OK)
                         {
-                            if (pIngvar->HasAura(SPELL_SUMMON_BANSHEE))
-                                pIngvar->RemoveAurasDueToSpell(SPELL_SUMMON_BANSHEE);
+                            m_uiResurrectTimer = 500;
+                            return;
                         }
+                        ingvar->RemoveAurasDueToSpell(SPELL_SUMMON_BANSHEE);
                         m_uiResurrectTimer = 3000;
                         break;
                     case 1:
-                        if (Creature* pIngvar = m_pInstance->GetSingleCreatureFromStorage(NPC_INGVAR))
-                            pIngvar->CastSpell(pIngvar, SPELL_SCOURGE_RES_SUMMON, TRIGGERED_OLD_TRIGGERED);
+                        if (ingvar->CastSpell(ingvar, SPELL_SCOURGE_RES_SUMMON, TRIGGERED_OLD_TRIGGERED) != SPELL_CAST_OK)
+                        {
+                            m_uiResurrectTimer = 500;
+                            return;
+                        }
                         m_uiResurrectTimer = 5000;
                         break;
                     case 2:
-                        if (Creature* pIngvar = m_pInstance->GetSingleCreatureFromStorage(NPC_INGVAR))
-                            pIngvar->CastSpell(pIngvar, SPELL_SCOURGE_RES_HEAL, TRIGGERED_NONE);
+                        if (ingvar->CastSpell(ingvar, SPELL_SCOURGE_RES_HEAL, TRIGGERED_NONE) != SPELL_CAST_OK)
+                        {
+                            m_uiResurrectTimer = 500;
+                            return;
+                        }
                         m_uiResurrectTimer = 3000;
                         break;
                     case 3:
                         // inform Ingvar about transformation
-                        if (Creature* pIngvar = m_pInstance->GetSingleCreatureFromStorage(NPC_INGVAR))
-                            SendAIEvent(AI_EVENT_CUSTOM_B, m_creature, pIngvar);
+                        SendAIEvent(AI_EVENT_CUSTOM_B, m_creature, ingvar);
 
                         // despawn the creature
                         m_creature->GetMotionMaster()->MovePoint(2, m_creature->GetPositionX(), m_creature->GetPositionY(), m_creature->GetPositionZ() + 50);

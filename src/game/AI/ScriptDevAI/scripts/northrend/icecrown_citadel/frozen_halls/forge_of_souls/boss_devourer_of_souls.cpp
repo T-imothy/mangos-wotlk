@@ -142,7 +142,7 @@ struct boss_devourer_of_soulsAI : public ScriptedAI
     {
         if (m_pInstance)
         {
-            m_pInstance->SetData(NPC_DEVOURER_OF_SOULS, FAIL);
+            m_pInstance->SetData(TYPE_DEVOURER_OF_SOULS, FAIL);
             // If we previously failed, set such that possible to try again
             m_pInstance->SetData(TYPE_ACHIEV_PHANTOM_BLAST, IN_PROGRESS);
         }

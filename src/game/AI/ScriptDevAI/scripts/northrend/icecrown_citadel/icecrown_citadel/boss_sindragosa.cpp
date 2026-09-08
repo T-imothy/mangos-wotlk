@@ -236,27 +236,26 @@ struct boss_sindragosaAI : public ScriptedAI
 
     void MovementInform(uint32 uiMovementType, uint32 uiPointId) override
     {
-        if (uiMovementType != POINT_MOTION_TYPE)
+        if (uiMovementType != POINT_MOTION_TYPE || !m_creature->IsAlive())
             return;
 
-        if (uiPointId == SINDRAGOSA_POINT_AIR_EAST)
+        if (uiPointId == SINDRAGOSA_POINT_AIR_EAST && m_uiPhase == SINDRAGOSA_PHASE_OOC)
         {
             m_creature->GetMotionMaster()->MovePoint(SINDRAGOSA_POINT_AIR_WEST, SindragosaPosition[9][0], SindragosaPosition[9][1], SindragosaPosition[9][2]);
         }
-        else if (uiPointId == SINDRAGOSA_POINT_AIR_WEST)
+        else if (uiPointId == SINDRAGOSA_POINT_AIR_WEST && m_uiPhase == SINDRAGOSA_PHASE_OOC)
         {
             m_creature->GetMotionMaster()->MovePoint(SINDRAGOSA_POINT_AIR_EAST, SindragosaPosition[8][0], SindragosaPosition[8][1], SindragosaPosition[8][2]);
         }
         else if (uiPointId == SINDRAGOSA_POINT_GROUND_CENTER)
         {
             // fly up
-            if (m_uiPhase == SINDRAGOSA_PHASE_GROUND)
+            if (m_uiPhase == SINDRAGOSA_PHASE_FLYING_TO_AIR)
             {
-                m_uiPhase = SINDRAGOSA_PHASE_FLYING_TO_AIR;
                 SetFlying(true);
                 m_creature->GetMotionMaster()->MovePoint(SINDRAGOSA_POINT_AIR_CENTER, SindragosaPosition[1][0], SindragosaPosition[1][1], SindragosaPosition[1][2]);
             }
-            else // land and attack
+            else if (m_uiPhase == SINDRAGOSA_PHASE_AGGRO || m_uiPhase == SINDRAGOSA_PHASE_FLYING_TO_GROUND) // land and attack
             {
                 // on aggro, after landing: set instance data and cast initial spells
                 if (m_uiPhase == SINDRAGOSA_PHASE_AGGRO)
@@ -289,7 +288,7 @@ struct boss_sindragosaAI : public ScriptedAI
                 m_creature->GetMotionMaster()->MovePoint(SINDRAGOSA_POINT_AIR_PHASE_2, SindragosaPosition[2][0], SindragosaPosition[2][1], SindragosaPosition[2][2]);
             }
         }
-        else if (uiPointId == SINDRAGOSA_POINT_AIR_PHASE_2)
+        else if (uiPointId == SINDRAGOSA_POINT_AIR_PHASE_2 && m_uiPhase == SINDRAGOSA_PHASE_FLYING_TO_AIR)
         {
             m_creature->SetOrientation(M_PI_F); // face the platform
             m_uiFrostBombTimer = 10000; // set initial Frost Bomb timer
@@ -361,14 +360,16 @@ struct boss_sindragosaAI : public ScriptedAI
                     }
 
                     // Phase 2 (air)
-                    if (m_uiPhaseTimer <= uiDiff)
+                    if (m_uiPhase == SINDRAGOSA_PHASE_GROUND && m_uiPhaseTimer <= uiDiff)
                     {
+                        m_uiPhase = SINDRAGOSA_PHASE_FLYING_TO_AIR;
                         m_uiPhaseTimer = 33000;
                         DoScriptText(SAY_TAKEOFF, m_creature);
                         SetCombatMovement(false);
                         m_creature->GetMotionMaster()->MovePoint(SINDRAGOSA_POINT_GROUND_CENTER, SindragosaPosition[0][0], SindragosaPosition[0][1], SindragosaPosition[0][2]);
+                        return;
                     }
-                    else
+                    else if (m_uiPhase == SINDRAGOSA_PHASE_GROUND)
                         m_uiPhaseTimer -= uiDiff;
                 }
 
@@ -437,6 +438,7 @@ struct boss_sindragosaAI : public ScriptedAI
                     m_uiPhase = SINDRAGOSA_PHASE_FLYING_TO_GROUND;
                     m_uiPhaseTimer = 42000;
                     m_creature->GetMotionMaster()->MovePoint(SINDRAGOSA_POINT_AIR_CENTER, SindragosaPosition[1][0], SindragosaPosition[1][1], SindragosaPosition[1][2]);
+                    return;
                 }
                 else
                     m_uiPhaseTimer -= uiDiff;
