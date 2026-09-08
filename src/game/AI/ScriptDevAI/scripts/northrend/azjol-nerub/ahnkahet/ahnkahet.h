@@ -75,7 +75,6 @@ class instance_ahnkahet : public ScriptedInstance
 
         void OnCreatureEvade(Creature* pCreature) override;
         void OnCreatureDeath(Creature* pCreature) override;
-        void OnCreatureDespawn(Creature* pCreature) override;
 
         void SetData(uint32 uiType, uint32 uiData) override;
         uint32 GetData(uint32 uiType) const override;
@@ -96,7 +95,6 @@ class instance_ahnkahet : public ScriptedInstance
 
     private:
         void HandleInsanityClear();
-        void FinishInsanityVisage(Creature* creature, bool died);
         void HandleInsanitySwitch(Player* pPlayer);
 
         uint32 m_auiEncounter[MAX_ENCOUNTER];
@@ -107,8 +105,7 @@ class instance_ahnkahet : public ScriptedInstance
 
         uint8 m_uiDevicesActivated;
         uint8 m_uiInitiatesKilled;
-        uint32 m_uiTwistedVisageCount;
-        std::set<ObjectGuid> m_insanityVisages;
+        uint8 m_uiTwistedVisageCount;
 
         ObjectGuid m_jedogaSacrificeController;
 

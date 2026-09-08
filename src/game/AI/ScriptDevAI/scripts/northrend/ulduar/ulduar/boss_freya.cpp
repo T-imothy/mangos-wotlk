@@ -211,7 +211,6 @@ struct boss_freyaAI : public ScriptedAI
 
     uint32 m_uiAlliesNatureTimer;
     uint8 m_uiAlliesWaveCount;
-    uint32 m_uiAllyRetryTimer;
 
     uint32 m_uiSunbeamTimer;
     uint32 m_uiNatureBombTimer;
@@ -239,7 +238,6 @@ struct boss_freyaAI : public ScriptedAI
 
         m_uiAlliesNatureTimer       = 10000;
         m_uiAlliesWaveCount         = 0;
-        m_uiAllyRetryTimer          = 0;
         m_uiNatureBombTimer         = 65000;
         m_uiSunbeamTimer            = 20000;
         m_uiLifebindersGiftTimer    = 25000;
@@ -481,26 +479,19 @@ struct boss_freyaAI : public ScriptedAI
         // handle Allies of Nature spawn
         if (eventType == AI_EVENT_CUSTOM_A)
         {
-            if (!m_creature->IsAlive() || !m_creature->IsInCombat() || m_bEventFinished ||
-                m_uiAlliesWaveCount >= MAX_ALLIES_WAVES || spawnSpellsVector.size() != MAX_ALLIES_SPELLS)
-                return;
             // adjust the index to the size of the vector
             uint8 uiIndex = m_uiAlliesWaveCount;
             if (uiIndex >= MAX_ALLIES_SPELLS)
                 uiIndex = m_uiAlliesWaveCount - MAX_ALLIES_SPELLS;
 
-            if (DoCastSpellIfCan(m_creature, spawnSpellsVector[uiIndex], CAST_TRIGGERED) != CAST_OK)
-            {
-                m_uiAllyRetryTimer = 1000;
-                return;
-            }
-            m_uiAllyRetryTimer = 0;
             switch (spawnSpellsVector[uiIndex])
             {
                 case SPELL_SUMMON_WAVE_1:  DoScriptText(SAY_ADDS_CONSERVATOR, m_creature); break;
                 case SPELL_SUMMON_WAVE_3:  DoScriptText(SAY_ADDS_TRIO, m_creature);        break;
                 case SPELL_SUMMON_WAVE_10: DoScriptText(SAY_ADDS_LASHER, m_creature);      break;
             }
+
+            DoCastSpellIfCan(m_creature, spawnSpellsVector[uiIndex], CAST_TRIGGERED);
 
             ++m_uiAlliesWaveCount;
 
@@ -511,8 +502,8 @@ struct boss_freyaAI : public ScriptedAI
                 std::shuffle(spawnSpellsVector.begin(), spawnSpellsVector.end(), *GetRandomGenerator());
 
                 // make sure we won't repeat the last spell
-                if (spawnSpellsVector[0] == uiLastSpell)
-                    std::swap(spawnSpellsVector[0], spawnSpellsVector[urand(1, MAX_ALLIES_SPELLS - 1)]);
+                while (spawnSpellsVector[0] == uiLastSpell)
+                    std::shuffle(spawnSpellsVector.begin(), spawnSpellsVector.end(), *GetRandomGenerator());
             }
         }
         else if (eventType == AI_EVENT_CUSTOM_B)
@@ -626,16 +617,6 @@ struct boss_freyaAI : public ScriptedAI
 
         if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
             return;
-
-        if (m_uiAllyRetryTimer)
-        {
-            if (m_uiAllyRetryTimer <= uiDiff)
-            {
-                m_uiAllyRetryTimer = 0;
-                ReceiveAIEvent(AI_EVENT_CUSTOM_A, m_creature, m_creature, 0);
-            }
-            else m_uiAllyRetryTimer -= uiDiff;
-        }
 
         if (m_uiBerserkTimer)
         {
@@ -796,7 +777,7 @@ struct SummonAlliesOfNature : public SpellScript
     void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
     {
         Unit* target = spell->GetUnitTarget();
-        if (target && target->GetEntry() == NPC_FREYA && target->AI())
+        if (target->GetEntry() == NPC_FREYA)
             target->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, spell->GetCaster(), target);
     }
 };

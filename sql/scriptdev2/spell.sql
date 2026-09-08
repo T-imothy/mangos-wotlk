@@ -95,7 +95,7 @@ INSERT INTO spell_scripts(Id, ScriptName) VALUES
 (23253,'spell_terrordale_haunting_spirit3'),
 (23441,'spell_gadgetzan_transporter'),
 (23442,'spell_everlook_transporter'),
-(24223,'spell_arlokk_vanish'),
+(24228,'spell_arlokk_vanish'),
 (24314,'spell_threatening_gaze'),
 (24335,'spell_wyvern_sting_aura'),
 (24342,'spell_despawn_chained_spirits'),
@@ -2400,73 +2400,3 @@ INSERT INTO spell_scripts(Id, ScriptName) VALUES
 (26505, 'spell_lunar_festival_cluster_big_u'),
 (26510, 'spell_lunar_festival_cluster_big_u'),
 (26515, 'spell_lunar_festival_cluster_big_u');
-
--- Krystallus normal/heroic Shatter distance damage.
-INSERT INTO spell_scripts (Id, ScriptName) VALUES
-(50811, 'spell_krystallus_shatter_damage'),
-(61547, 'spell_krystallus_shatter_damage');
-
--- Sindragosa native Ice Tomb chain and Ice Block LOS, with all payload difficulties.
-INSERT IGNORE INTO spell_scripts (Id,ScriptName) VALUES
-(69712,'spell_sindragosa_ice_tomb_selector'),
-(69675,'spell_sindragosa_ice_tomb_selector'),
-(70126,'spell_sindragosa_frost_beacon'),
-(70157,'spell_sindragosa_ice_tomb_trap'),
-(69845,'spell_sindragosa_ice_block_los'),
-(71053,'spell_sindragosa_ice_block_los'),
-(71054,'spell_sindragosa_ice_block_los'),
-(71055,'spell_sindragosa_ice_block_los'),
-(70127,'spell_sindragosa_ice_block_los'),
-(72528,'spell_sindragosa_ice_block_los'),
-(72529,'spell_sindragosa_ice_block_los'),
-(72530,'spell_sindragosa_ice_block_los');
-
--- Restore reference distance falloff for 25-player Nova only; preserve both native target radii.
-INSERT IGNORE INTO spell_scripts (Id,ScriptName) VALUES (65279,'spell_emalon_lightning_nova');
-
--- Complete native Icy Grip, Instability expiry and Unchained Magic selection.
-INSERT IGNORE INTO spell_scripts (Id,ScriptName) VALUES
-(70117,'spell_sindragosa_icy_grip'),
-(69766,'spell_sindragosa_instability'),
-(69762,'spell_sindragosa_unchained_magic');
-
--- Freya uses both raid-size selector spells.
-INSERT IGNORE INTO spell_scripts (Id,ScriptName) VALUES
-(62678,'spell_summon_allies_of_nature'),
-(62873,'spell_summon_allies_of_nature');
-
--- C'Thun tentacle birth and portal dispatch.
-INSERT IGNORE INTO spell_scripts (Id,ScriptName) VALUES
-(26586,'spell_birth_tentacles'),
-(26140,'spell_summon_hook_tentacle'),
-(26216,'spell_summon_giant_hook_tentacles'),
-(26150,'spell_summon_eye_tentacle'),
-(26768,'spell_summon_giant_eye_tentacles');
-
--- Restore Gruul secondary-tank selection in the earlier raid.
-INSERT IGNORE INTO spell_scripts (Id,ScriptName) VALUES (33812,'spell_hurtful_strike_primer');
-
--- Encounter cleanup, summon ownership, phase routing and keeper rescue.
-INSERT IGNORE INTO spell_scripts (Id,ScriptName) VALUES (65594,'spell_cancel_kologarn_stone_grip'),
-(64224,'spell_kologarn_stone_grip_absorb'),
-(64225,'spell_kologarn_stone_grip_absorb'),
-(62056,'spell_kologarn_stone_grip'),
-(63985,'spell_kologarn_stone_grip'),
-(63343,'spell_kologarn_eyebeam_summon'),
-(63701,'spell_kologarn_eyebeam_summon'),
-(57500,'spell_summon_volazj_visage'),
-(57501,'spell_summon_volazj_visage'),
-(57502,'spell_summon_volazj_visage'),
-(57503,'spell_summon_volazj_visage'),
-(57504,'spell_summon_volazj_visage'),
-(63133,'spell_thaddius_clear_charges'),
-(53242,'spell_clear_gift_of_tharonja'),
-(64174,'spell_hodirs_protective_gaze');
-
--- Keep the full spell-script import consistent with encounter migrations 5877-5880.
-INSERT IGNORE INTO spell_scripts (Id,ScriptName) VALUES
-(66862,'spell_eadric_radiance'),
-(67681,'spell_eadric_radiance'),
-(47958,'spell_crystal_spikes'),
-(69172,'spell_overlords_brand'),
-(56648,'spell_amanitar_potent_fungus');

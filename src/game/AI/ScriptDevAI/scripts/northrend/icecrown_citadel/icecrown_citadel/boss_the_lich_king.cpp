@@ -288,9 +288,6 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
     {
         // TODO: handling phases "intro" and "one" and aggroing depending on resetting encounter
         m_uiPhase               = PHASE_INTRO;
-        m_uiPhaseTimer          = 0;
-        m_uiFrostmournePhaseTimer = 0;
-        SetCombatMovement(true);
 
         m_uiBerserkTimer        = 15 * MINUTE * IN_MILLISECONDS;
         m_uiGhoulsTimer         = 13000;
@@ -342,7 +339,7 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
 
     void MovementInform(uint32 uiMovementType, uint32 uiData) override
     {
-        if (uiMovementType != POINT_MOTION_TYPE || !m_creature->IsAlive())
+        if (uiMovementType != POINT_MOTION_TYPE)
             return;
 
         switch (uiData)
@@ -389,10 +386,7 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
         if (m_uiPhase != PHASE_INTRO && m_uiPhase != PHASE_DEATH_AWAITS)
         {
             // check evade
-            // Heroic Harvest temporarily removes all local victims. Its realm
-            // timer must still expire so the boss can resume normal combat.
-            if (m_uiPhase != PHASE_IN_FROSTMOURNE &&
-                (!m_creature->SelectHostileTarget() || !m_creature->GetVictim()))
+            if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
                 return;
 
             // Berserk
@@ -423,11 +417,10 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                 // check HP
                 if (m_creature->GetHealthPercent() <= 70.0f)
                 {
-                    // Commit the transition before movement can report arrival.
-                    m_uiPhase = PHASE_RUNNING_WINTER_ONE;
-                    SetCombatMovement(false);
+                    // phase transition
                     m_creature->GetMotionMaster()->Clear();
                     m_creature->GetMotionMaster()->MovePoint(POINT_CENTER_LAND, fLichKingPosition[1][0], fLichKingPosition[1][1], fLichKingPosition[1][2]);
+                    m_uiPhase = PHASE_RUNNING_WINTER_ONE;
                     return;
                 }
 
@@ -507,7 +500,6 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                         DoScriptText(SAY_SHATTER_ARENA, m_creature);
                         m_uiPhase = (m_uiPhase == PHASE_TRANSITION_ONE ? PHASE_QUAKE_ONE : PHASE_QUAKE_TWO);
                         m_uiPhaseTimer = 6500;
-                        return;
                     }
                 }
                 else
@@ -557,7 +549,6 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                     // TODO: destroy platform
 
                     m_uiPhase = (m_uiPhase == PHASE_QUAKE_ONE ? PHASE_TWO : PHASE_THREE);
-                    SetCombatMovement(true);
                     m_creature->GetMotionMaster()->Clear();
                     m_creature->GetMotionMaster()->MoveChase(m_creature->GetVictim());
                 }
@@ -571,12 +562,11 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                 // check HP
                 if (m_creature->GetHealthPercent() <= 40.0f)
                 {
-                    m_uiPhase = PHASE_RUNNING_WINTER_TWO;
-                    m_uiPhaseTimer = 60000;
-                    SetCombatMovement(false);
+                    // phase transition
                     m_creature->GetMotionMaster()->Clear();
                     m_creature->GetMotionMaster()->MovePoint(POINT_CENTER_LAND, fLichKingPosition[1][0], fLichKingPosition[1][1], fLichKingPosition[1][2]);
-                    return;
+                    m_uiPhaseTimer = 60000;
+                    m_uiPhase = PHASE_RUNNING_WINTER_TWO;
                 }
 
                 // Soul Reaper
@@ -717,7 +707,6 @@ struct boss_the_lich_king_iccAI : public ScriptedAI
                 if (m_uiFrostmournePhaseTimer < uiDiff)
                 {
                     m_uiPhase = PHASE_THREE;
-                    SetCombatMovement(true);
                     if (m_creature->GetVictim())
                         m_creature->GetMotionMaster()->MoveChase(m_creature->GetVictim());
                 }

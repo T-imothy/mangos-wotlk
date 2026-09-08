@@ -74,8 +74,7 @@ void instance_ahnkahet::OnCreatureCreate(Creature* pCreature)
         case NPC_TWISTED_VISAGE_3:
         case NPC_TWISTED_VISAGE_4:
         case NPC_TWISTED_VISAGE_5:
-            if (GetData(TYPE_VOLAZJ) == SPECIAL && m_insanityVisages.insert(pCreature->GetObjectGuid()).second)
-                m_uiTwistedVisageCount = m_insanityVisages.size();
+            ++m_uiTwistedVisageCount;
             break;
     }
 }
@@ -162,26 +161,15 @@ void instance_ahnkahet::SetData(uint32 uiType, uint32 uiData)
             m_auiEncounter[uiType] = uiData;
             break;
         case TYPE_VOLAZJ:
-        {
-            const uint32 previous = m_auiEncounter[uiType];
             m_auiEncounter[uiType] = uiData;
-            if (uiData != SPECIAL)
+            if (uiData == IN_PROGRESS)
             {
-                HandleInsanityClear();
-                // Detach before despawning: native callbacks can be immediate.
-                std::set<ObjectGuid> oldVisages;
-                oldVisages.swap(m_insanityVisages);
                 m_uiTwistedVisageCount = 0;
                 m_lInsanityPlayersGuidList.clear();
-                for (ObjectGuid guid : oldVisages)
-                    if (Creature* visage = instance->GetCreature(guid))
-                        visage->ForcedDespawn();
-            }
-            // Returning from an Insanity phase is not a fresh timed attempt.
-            if (uiData == IN_PROGRESS && previous != SPECIAL && previous != IN_PROGRESS)
+
                 instance->StartEventForAllPlayersInMap(ACHIEV_START_VOLAZJ_ID, nullptr);
+            }
             break;
-        }
 
         default:
             script_error_log("Instance Ahn'Kahet: ERROR SetData = %u for type %u does not exist/not implemented.", uiType, uiData);
@@ -230,7 +218,39 @@ void instance_ahnkahet::OnCreatureDeath(Creature* pCreature)
         case NPC_TWISTED_VISAGE_3:
         case NPC_TWISTED_VISAGE_4:
         case NPC_TWISTED_VISAGE_5:
-            FinishInsanityVisage(pCreature, true);
+            pCreature->CastSpell(pCreature, SPELL_TWISTED_VISAGE_DEATH, TRIGGERED_OLD_TRIGGERED);
+
+            --m_uiTwistedVisageCount;
+
+            // When all Twisted Visages were killed or despawned switch back to combat phase
+            if (!m_uiTwistedVisageCount)
+            {
+                // Clear Insanity
+                if (Creature* pVolazj = GetSingleCreatureFromStorage(NPC_HERALD_VOLAZJ))
+                {
+                    pVolazj->CastSpell(pVolazj, SPELL_INSANITY_CLEAR, TRIGGERED_OLD_TRIGGERED);
+                    pVolazj->RemoveAllAuras();
+                }
+
+                // Clear insanity manually for now, because the spell won't hit phased players
+                HandleInsanityClear();
+
+                SetData(TYPE_VOLAZJ, IN_PROGRESS);
+            }
+            else
+            {
+                // Switch Insanity
+                if (Creature* pVolazj = GetSingleCreatureFromStorage(NPC_HERALD_VOLAZJ))
+                    pVolazj->CastSpell(pVolazj, SPELL_INSANITY_SWITCH, TRIGGERED_OLD_TRIGGERED);
+
+                // Handle insanity switch manually, because the boss can't hit phased players
+                if (pCreature->IsTemporarySummon())
+                {
+                    // Switch insanity phase for the master player
+                    if (Player* pPlayer = instance->GetPlayer(pCreature->GetSpawnerGuid()))
+                        HandleInsanitySwitch(pPlayer);
+                }
+            }
             break;
     }
 }
@@ -244,39 +264,26 @@ void instance_ahnkahet::OnCreatureEvade(Creature* pCreature)
         case NPC_TWISTED_VISAGE_3:
         case NPC_TWISTED_VISAGE_4:
         case NPC_TWISTED_VISAGE_5:
-            FinishInsanityVisage(pCreature, false);
+            --m_uiTwistedVisageCount;
+
+            // When all Twisted Visages were killed or despawned switch back to combat phase
+            if (!m_uiTwistedVisageCount)
+            {
+                // Clear Insanity
+                if (Creature* pVolazj = GetSingleCreatureFromStorage(NPC_HERALD_VOLAZJ))
+                {
+                    pVolazj->CastSpell(pVolazj, SPELL_INSANITY_CLEAR, TRIGGERED_OLD_TRIGGERED);
+                    pVolazj->RemoveAllAuras();
+                }
+
+                // Clear insanity manually for now, because the spell won't hit phased players
+                HandleInsanityClear();
+
+                SetData(TYPE_VOLAZJ, IN_PROGRESS);
+            }
 
             pCreature->ForcedDespawn();
             break;
-    }
-}
-
-void instance_ahnkahet::OnCreatureDespawn(Creature* creature)
-{
-    FinishInsanityVisage(creature, false);
-}
-
-void instance_ahnkahet::FinishInsanityVisage(Creature* creature, bool died)
-{
-    if (!creature || GetData(TYPE_VOLAZJ) != SPECIAL ||
-        !m_insanityVisages.erase(creature->GetObjectGuid()))
-        return;
-    m_uiTwistedVisageCount = m_insanityVisages.size();
-    if (died)
-        creature->CastSpell(creature, SPELL_TWISTED_VISAGE_DEATH, TRIGGERED_OLD_TRIGGERED);
-    if (m_insanityVisages.empty())
-    {
-        if (Creature* boss = GetSingleCreatureFromStorage(NPC_HERALD_VOLAZJ))
-        {
-            boss->CastSpell(boss, SPELL_INSANITY_CLEAR, TRIGGERED_OLD_TRIGGERED);
-            boss->RemoveAurasDueToSpell(57561); // only the Insanity visual/channel
-        }
-        SetData(TYPE_VOLAZJ, IN_PROGRESS);
-    }
-    else if (creature->IsTemporarySummon())
-    {
-        if (Player* player = instance->GetPlayer(creature->GetSpawnerGuid()))
-            HandleInsanitySwitch(player);
     }
 }
 
@@ -312,28 +319,23 @@ ObjectGuid instance_ahnkahet::SelectRandomSwarmerEggGuid()
     return *iter;
 }
 
-static uint32 GetVolazjInsanityPhase(Player* player)
-{
-    if (!player) return 0;
-    for (uint32 spell : {uint32(SPELL_INSANITY_PHASE_16), uint32(SPELL_INSANITY_PHASE_32),
-        uint32(SPELL_INSANITY_PHASE_64), uint32(SPELL_INSANITY_PHASE_128), uint32(SPELL_INSANITY_PHASE_256)})
-        if (player->HasAura(spell)) return spell;
-    return 0;
-}
-
 void instance_ahnkahet::HandleInsanityClear()
 {
-    for (auto const& reference : instance->GetPlayers())
-        if (Player* player = reference.getSource())
-            for (uint32 spell : {uint32(SPELL_INSANITY_PHASE_16), uint32(SPELL_INSANITY_PHASE_32),
-                uint32(SPELL_INSANITY_PHASE_64), uint32(SPELL_INSANITY_PHASE_128), uint32(SPELL_INSANITY_PHASE_256)})
-                player->RemoveAurasDueToSpell(spell);
+    for (GuidList::const_iterator itr = m_lInsanityPlayersGuidList.begin(); itr != m_lInsanityPlayersGuidList.end(); ++itr)
+    {
+        if (Player* pPlayer = instance->GetPlayer(*itr))
+            pPlayer->RemoveSpellsCausingAura(SPELL_AURA_PHASE);
+    }
 }
 
 void instance_ahnkahet::HandleInsanitySwitch(Player* pPhasedPlayer)
 {
-    uint32 uiPhaseAura = GetVolazjInsanityPhase(pPhasedPlayer);
-    if (!uiPhaseAura) return;
+    // Get the phase aura id
+    std::list<Aura*> lAuraList = pPhasedPlayer->GetAurasByType(SPELL_AURA_PHASE);
+    if (lAuraList.empty())
+        return;
+
+    uint32 uiPhaseAura = (*lAuraList.begin())->GetId();
 
     PlayerList lSamePhasePlayers;
     std::vector<Player*> vOtherPhasePlayers;
@@ -346,7 +348,7 @@ void instance_ahnkahet::HandleInsanitySwitch(Player* pPhasedPlayer)
             if (pTemp->HasAura(uiPhaseAura))
                 lSamePhasePlayers.push_back(pTemp);
             // Check only for alive players
-            else if (pTemp->IsAlive() && GetVolazjInsanityPhase(pTemp))
+            else if (pTemp->IsAlive())
                 vOtherPhasePlayers.push_back(pTemp);
         }
     }
@@ -358,19 +360,16 @@ void instance_ahnkahet::HandleInsanitySwitch(Player* pPhasedPlayer)
     // Get the phase aura of the new selected player
     Player* pNewPlayer = vOtherPhasePlayers[urand(0, vOtherPhasePlayers.size() - 1)];
 
-    uint32 uiNewPhaseAura = GetVolazjInsanityPhase(pNewPlayer);
-    if (!uiNewPhaseAura) return;
+    // Get the phase aura id
+    std::list<Aura*> lNewAuraList = pNewPlayer->GetAurasByType(SPELL_AURA_PHASE);
+    if (lNewAuraList.empty())
+        return;
+
+    uint32 uiNewPhaseAura = (*lNewAuraList.begin())->GetId();
 
     // Move the same phase players to the new phase
     for (PlayerList::const_iterator itr = lSamePhasePlayers.begin(); itr != lSamePhasePlayers.end(); ++itr)
-    {
         (*itr)->CastSpell((*itr), uiNewPhaseAura, TRIGGERED_OLD_TRIGGERED);
-        if ((*itr)->HasAura(uiNewPhaseAura))
-            for (uint32 spell : {uint32(SPELL_INSANITY_PHASE_16), uint32(SPELL_INSANITY_PHASE_32),
-                uint32(SPELL_INSANITY_PHASE_64), uint32(SPELL_INSANITY_PHASE_128), uint32(SPELL_INSANITY_PHASE_256)})
-                if (spell != uiNewPhaseAura)
-                    (*itr)->RemoveAurasDueToSpell(spell);
-    }
 }
 
 bool instance_ahnkahet::CheckAchievementCriteriaMeet(uint32 uiCriteriaId, Player const* /*pSource*/, Unit const* /*pTarget*/, uint32 /*uiMiscValue1 = 0*/) const

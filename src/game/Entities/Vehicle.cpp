@@ -556,7 +556,7 @@ void VehicleInfo::UnBoard(Unit* passenger, bool changeVehicle)
                 exitPos.x = params->exitParamX;
                 exitPos.y = params->exitParamY;
                 exitPos.z = params->exitParamZ;
-                exitPos.o = params->exitParamO;
+                exitPos.o = params->exitParamZ;
             }
         }
 

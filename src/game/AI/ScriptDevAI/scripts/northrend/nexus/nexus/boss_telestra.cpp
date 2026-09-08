@@ -193,13 +193,6 @@ struct boss_telestraAI : public BossAI
     // Method to handle ther merge of the clones
     void HandlePersonalityMerge()
     {
-        // The custom timer is one-shot. A failed cast must be retried while
-        // this split is active, or the boss remains permanently unattackable.
-        if (!m_creature->IsAlive() || !m_creature->IsInCombat() ||
-            !m_creature->HasAura(SPELL_SUMMON_CLONES) ||
-            (m_uiCloneDeadCount != 3 && m_uiCloneDeadCount != 6))
-            return;
-
         if (DoCastSpellIfCan(nullptr, SPELL_SPAWN_BACK_IN, CAST_TRIGGERED) == CAST_OK)
         {
             m_creature->RemoveAurasDueToSpell(SPELL_SUMMON_CLONES);
@@ -217,8 +210,6 @@ struct boss_telestraAI : public BossAI
             SetCombatMovement(true);
             SetCombatScriptStatus(false);
         }
-        else
-            ResetTimer(TELESTRA_SPAWN_BACK_IN, 500);
     }
 
     void OnSpellCast(SpellEntry const* spellInfo, Unit* /*target*/) override

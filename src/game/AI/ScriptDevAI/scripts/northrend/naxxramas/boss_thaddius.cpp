@@ -71,7 +71,7 @@ enum
     SPELL_POSITIVE_CHARGE_DAMAGE    = 28062,
     SPELL_NEGATIVE_CHARGE_DAMAGE    = 28085,
     SPELL_BESERK                    = 27680,
-    SPELL_CLEAR_CHARGES             = 63133,                // removes player polarity and associated damage buffs
+    SPELL_CLEAR_CHARGES             = 63133,                // TODO NYI, cast on death, most likely to remove remaining buffs
 
     // Stalagg & Feugen Spells
     SPELL_MAGNETIC_PULL_A           = 28338,
@@ -104,14 +104,6 @@ enum ThaddiusActions
     THADDIUS_ACTIONS_MAX,
 };
 
-static void ClearThaddiusPlayerCharges(Unit* target)
-{
-    if (!target || target->GetTypeId() != TYPEID_PLAYER) return;
-    for (uint32 id : {uint32(SPELL_POSITIVE_CHARGE), uint32(SPELL_NEGATIVE_CHARGE),
-        uint32(SPELL_POSITIVE_CHARGE_BUFF), uint32(SPELL_NEGATIVE_CHARGE_BUFF)})
-        target->RemoveAurasDueToSpell(id);
-}
-
 struct boss_thaddiusAI : public BossAI
 {
     boss_thaddiusAI(Creature* creature) : BossAI(creature, THADDIUS_ACTIONS_MAX),
@@ -129,18 +121,8 @@ struct boss_thaddiusAI : public BossAI
     instance_naxxramas* m_instance;
     bool m_isRegularMode;
 
-    void ClearPlayerCharges()
-    {
-        // Polarity is self-cast by each player. Caster-only removal using the
-        // boss GUID would therefore miss it, including on dead/out-of-range players.
-        for (auto const& reference : m_creature->GetMap()->GetPlayers())
-            if (Player* player = reference.getSource())
-                ClearThaddiusPlayerCharges(player);
-    }
-
     void Reset() override
     {
-        ClearPlayerCharges();
         BossAI::Reset();
         SetCombatScriptStatus(true);
         m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE | UNIT_FLAG_IMMUNE_TO_PLAYER);
@@ -156,7 +138,6 @@ struct boss_thaddiusAI : public BossAI
 
     void JustReachedHome() override
     {
-        ClearPlayerCharges();
         if (m_instance)
         {
             m_instance->SetData(TYPE_THADDIUS, FAIL);
@@ -180,7 +161,6 @@ struct boss_thaddiusAI : public BossAI
     void JustDied(Unit* /*killer*/) override
     {
         BossAI::JustDied();
-        ClearPlayerCharges();
 
         if (m_instance)
         {
@@ -193,7 +173,7 @@ struct boss_thaddiusAI : public BossAI
             if (stalagg)
                 stalagg->ForcedDespawn();
         }
-
+        DoCastSpellIfCan(nullptr, SPELL_CLEAR_CHARGES);
     }
 
     void OnSpellCooldownAdded(SpellEntry const* spellInfo) override
@@ -348,8 +328,6 @@ struct boss_thaddiusAddsAI : public BossAI
     Creature* GetOtherAdd() const
     // For Stalagg returns feugen, for Feugen returns stalagg
     {
-        if (!m_instance)
-            return nullptr;
         switch (m_creature->GetEntry())
         {
             case NPC_FEUGEN:  return m_instance->GetSingleCreatureFromStorage(NPC_STALAGG);
@@ -440,9 +418,7 @@ struct boss_thaddiusAddsAI : public BossAI
         m_creature->SetStandState(UNIT_STAND_STATE_DEAD);
         SetCombatScriptStatus(true);
 
-        // This is a reversible phase-one fake death, not encounter completion.
-        // BossAI::JustDied would mark TYPE_THADDIUS DONE and unlock the wing.
-        DoBroadcastText(m_creature->GetEntry() == NPC_STALAGG ? SAY_STAL_DEATH : SAY_FEUG_DEATH, m_creature, attacker);
+        JustDied(attacker);                                  // Texts
         ResetTimer(THADDIUS_ADD_REVIVE, 10s);
     }
 };
@@ -641,8 +617,7 @@ struct ThaddiusCharge : public AuraScript
             uint32 buffAuraId = aura->GetId() == SPELL_POSITIVE_CHARGE ? SPELL_POSITIVE_CHARGE_BUFF : SPELL_NEGATIVE_CHARGE_BUFF;
             float range = 13.f; // Static value from DBC files. As the value is the same for both spells we can hardcode it instead of accessing is through sSpellRadiusStore
 
-            Unit* caster = aura->GetCaster();
-            if (!caster || !caster->IsAlive())
+            if (!aura->GetCaster()->IsAlive())
             {
                 target->RemoveAurasDueToSpell(buffAuraId);
                 return;
@@ -747,15 +722,6 @@ struct ThaddiusTeslaChain : public AuraScript
     }
 };
 
-struct ClearThaddiusCharges : public SpellScript
-{
-    void OnEffectExecute(Spell* spell, SpellEffectIndex effect) const override
-    {
-        if (effect == EFFECT_INDEX_0)
-            ClearThaddiusPlayerCharges(spell->GetUnitTarget());
-    }
-};
-
 void AddSC_boss_thaddius()
 {
     Script* pNewScript = new Script;
@@ -782,7 +748,6 @@ void AddSC_boss_thaddius()
     RegisterSpellScript<ThaddiusLightningVisual>("spell_thaddius_lightning_visual");
     RegisterSpellScript<MagneticPullThaddius>("spell_magnetic_pull_thaddius");
     RegisterSpellScript<PolarityShift>("spell_thaddius_polarity_shift");
-    RegisterSpellScript<ClearThaddiusCharges>("spell_thaddius_clear_charges");
     RegisterSpellScript<ThaddiusChargeDamage>("spell_thaddius_charge_damage");
     RegisterSpellScript<ThaddiusCharge>("spell_thaddius_charge_buff");
     RegisterSpellScript<TriggerTeslas>("spell_trigger_teslas");

@@ -69,13 +69,13 @@ struct boss_ionarAI : public ScriptedAI
     instance_halls_of_lightning* m_pInstance;
 
     GuidList m_lSparkGUIDList;
-    GuidList m_lReturnedSparkGUIDList;
 
     bool m_bIsRegularMode;
 
     bool m_bIsDesperseCasting;
     bool m_bIsSplitPhase;
     uint32 m_uiSplitTimer;
+    uint32 m_uiSparkAtHomeCount;
 
     uint32 m_uiStaticOverloadTimer;
     uint32 m_uiBallLightningTimer;
@@ -87,7 +87,7 @@ struct boss_ionarAI : public ScriptedAI
         m_bIsSplitPhase = true;
         m_bIsDesperseCasting = false;
         m_uiSplitTimer = 25000;
-        m_lReturnedSparkGUIDList.clear();
+        m_uiSparkAtHomeCount = 0;
 
         m_uiStaticOverloadTimer = urand(5000, 6000);
         m_uiBallLightningTimer = urand(10000, 11000);
@@ -169,7 +169,6 @@ struct boss_ionarAI : public ScriptedAI
         }
 
         m_lSparkGUIDList.clear();
-        m_lReturnedSparkGUIDList.clear();
     }
 
     // make sparks come back
@@ -192,28 +191,9 @@ struct boss_ionarAI : public ScriptedAI
         }
     }
 
-    void RegisterSparkAtHome(ObjectGuid guid)
+    void RegisterSparkAtHome()
     {
-        if (m_bIsSplitPhase || m_creature->GetVisibility() != VISIBILITY_OFF ||
-            std::find(m_lSparkGUIDList.begin(), m_lSparkGUIDList.end(), guid) == m_lSparkGUIDList.end() ||
-            std::find(m_lReturnedSparkGUIDList.begin(), m_lReturnedSparkGUIDList.end(), guid) != m_lReturnedSparkGUIDList.end())
-            return;
-        m_lReturnedSparkGUIDList.push_back(guid);
-    }
-
-    bool HaveSparksReturned() const
-    {
-        // Count actual summons, not attempted casts. A missing/despawned spark
-        // cannot deliver a movement notification; duplicate callbacks cannot
-        // substitute for a different living spark still on its way back.
-        for (ObjectGuid guid : m_lSparkGUIDList)
-        {
-            Creature* spark = m_creature->GetMap()->GetCreature(guid);
-            if (spark && spark->IsAlive() &&
-                std::find(m_lReturnedSparkGUIDList.begin(), m_lReturnedSparkGUIDList.end(), guid) == m_lReturnedSparkGUIDList.end())
-                return false;
-        }
-        return true;
+        ++m_uiSparkAtHomeCount;
     }
 
     void JustSummoned(Creature* pSummoned) override
@@ -248,10 +228,12 @@ struct boss_ionarAI : public ScriptedAI
                     m_bIsSplitPhase = false;
                 }
                 // Lightning effect and restore Ionar
-                else if (HaveSparksReturned() && DoCastSpellIfCan(m_creature, SPELL_SPARK_DESPAWN) == CAST_OK)
+                else if (m_uiSparkAtHomeCount == MAX_SPARKS)
                 {
                     m_creature->SetVisibility(VISIBILITY_ON);
+                    DoCastSpellIfCan(m_creature, SPELL_SPARK_DESPAWN);
 
+                    m_uiSparkAtHomeCount = 0;
                     m_uiSplitTimer = 25000;
                     m_bIsSplitPhase = true;
                     m_bIsDesperseCasting = false;
@@ -291,20 +273,13 @@ struct boss_ionarAI : public ScriptedAI
         else
             m_uiBallLightningTimer -= uiDiff;
 
-        // An interrupted Disperse never reached its scripted split. Retry the
-        // same threshold rather than permanently consuming that transition.
-        if (m_bIsDesperseCasting && !m_creature->IsNonMeleeSpellCasted(false))
-        {
-            m_bIsDesperseCasting = false;
-            if (m_uiHealthAmountModifier > 1) --m_uiHealthAmountModifier;
-        }
-
         // Health check
         if (m_creature->GetHealthPercent() < float(100 - 20 * m_uiHealthAmountModifier))
         {
+            ++m_uiHealthAmountModifier;
+
             if (!m_bIsDesperseCasting && DoCastSpellIfCan(m_creature, SPELL_DISPERSE, CAST_INTERRUPT_PREVIOUS) == CAST_OK)
             {
-                ++m_uiHealthAmountModifier;
                 DoScriptText(urand(0, 1) ? SAY_SPLIT_1 : SAY_SPLIT_2, m_creature);
                 m_bIsDesperseCasting = true;
             }
@@ -320,7 +295,7 @@ struct DisperseIonar : public SpellScript
     void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
     {
         Unit* caster = spell->GetCaster();
-        if (caster->GetEntry() != NPC_IONAR || caster->GetVisibility() == VISIBILITY_OFF)
+        if (caster->GetEntry() != NPC_IONAR)
             return;
 
         for (uint8 i = 0; i < MAX_SPARKS; ++i)
@@ -380,7 +355,7 @@ struct mob_spark_of_ionarAI : public ScriptedAI
                 }
 
                 if (boss_ionarAI* pIonarAI = dynamic_cast<boss_ionarAI*>(pIonar->AI()))
-                    pIonarAI->RegisterSparkAtHome(m_creature->GetObjectGuid());
+                    pIonarAI->RegisterSparkAtHome();
             }
             else
                 m_creature->ForcedDespawn();

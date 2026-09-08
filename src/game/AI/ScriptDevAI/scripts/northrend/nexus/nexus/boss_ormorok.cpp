@@ -129,7 +129,7 @@ struct boss_ormorokAI : public BossAI
 
     void OnSpellCast(SpellEntry const* spellInfo, Unit* /*target*/) override
     {
-        if (spellInfo->Id == SPELL_CRYSTAL_SPIKES || spellInfo->Id == SPELL_CRYSTAL_SPIKES_H1 || spellInfo->Id == SPELL_CRYSTAL_SPIKES_H2)
+        if (spellInfo->Id == SPELL_CRYSTAL_SPIKES_H1 || spellInfo->Id == SPELL_CRYSTAL_SPIKES_H2)
         {
             DoBroadcastText(SAY_ICESPIKE, m_creature);
             m_uiSpikeCount = 0;

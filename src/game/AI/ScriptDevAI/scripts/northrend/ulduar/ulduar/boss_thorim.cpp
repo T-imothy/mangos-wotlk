@@ -454,9 +454,6 @@ struct boss_thorimAI : public ScriptedAI, private DialogueHelper
                 lBunnies.push_back(pBunny);
         }
 
-        // Stored GUIDs can outlive their creatures after cleanup or a reset.
-        if (lBunnies.empty())
-            return nullptr;
         lBunnies.sort(ObjectDistanceOrder(pSource));
         return lBunnies.front();
     }

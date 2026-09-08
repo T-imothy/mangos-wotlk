@@ -96,8 +96,6 @@ struct boss_black_knightAI : public ScriptedAI
 
     uint8 m_uiPhase;
     uint8 m_uiNextPhase;
-    uint32 m_uiResurrectionTimer;
-    uint32 m_uiArmyTimer;
 
     uint32 m_uiDeathsRespiteTimer;
     uint32 m_uiIcyTouchTimer;
@@ -115,9 +113,6 @@ struct boss_black_knightAI : public ScriptedAI
     void Reset() override
     {
         m_uiPhase               = PHASE_DEATH_KNIGHT;
-        m_uiNextPhase           = PHASE_DEATH_KNIGHT;
-        m_uiResurrectionTimer   = 0;
-        m_uiArmyTimer           = 0;
 
         m_uiDeathsRespiteTimer  = 10000;
         m_uiIcyTouchTimer       = urand(5000, 10000);
@@ -186,15 +181,13 @@ struct boss_black_knightAI : public ScriptedAI
     {
         if (m_uiPhase == PHASE_GHOST)
             return;
-        if (m_uiPhase == PHASE_TRANSITION)
-        {
-            uiDamage = 0;
-            return;
-        }
 
         if (uiDamage >= m_creature->GetHealth())
         {
             uiDamage = 0;
+
+            if (m_uiPhase == PHASE_TRANSITION)
+                return;
 
             // start transition phase
             if (m_uiPhase == PHASE_DEATH_KNIGHT)
@@ -224,34 +217,22 @@ struct boss_black_knightAI : public ScriptedAI
             m_creature->GetMotionMaster()->MoveIdle();
             m_creature->SetStandState(UNIT_STAND_STATE_DEAD);
 
-            m_uiPhase = PHASE_TRANSITION;
-            // The native feign aura triggers resurrection after five seconds.
-            m_uiResurrectionTimer = 6000;
             DoCastSpellIfCan(m_creature, SPELL_FEIGN_DEATH, CAST_TRIGGERED);
             DoCastSpellIfCan(m_creature, SPELL_CLEAR_ALL_DEBUFFS, CAST_TRIGGERED);
             DoCastSpellIfCan(m_creature, SPELL_FULL_HEAL, CAST_TRIGGERED);
+            m_uiPhase = PHASE_TRANSITION;
         }
     }
 
     void ReceiveAIEvent(AIEventType eventType, Unit* /*pSender*/, Unit* pInvoker, uint32 /*uiMiscValue*/) override
     {
         // finish transition
-        if (eventType == AI_EVENT_CUSTOM_A && pInvoker == m_creature && m_uiPhase == PHASE_TRANSITION &&
-            (m_uiNextPhase == PHASE_SKELETON || m_uiNextPhase == PHASE_GHOST) &&
-            m_creature->IsAlive() && m_creature->IsInCombat())
+        if (eventType == AI_EVENT_CUSTOM_A)
         {
-            if (m_creature->GetHealth() < m_creature->GetMaxHealth() &&
-                DoCastSpellIfCan(m_creature, SPELL_FULL_HEAL, CAST_TRIGGERED) != CAST_OK)
-            {
-                m_uiResurrectionTimer = 500;
-                return;
-            }
-            m_uiResurrectionTimer = 0;
             m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE);
             m_creature->SetStandState(UNIT_STAND_STATE_STAND);
             m_creature->GetMotionMaster()->Clear();
-            if (Unit* victim = m_creature->GetVictim())
-                m_creature->GetMotionMaster()->MoveChase(victim);
+            m_creature->GetMotionMaster()->MoveChase(m_creature->GetVictim());
             DoResetThreat();
 
             m_uiPhase = m_uiNextPhase;
@@ -261,7 +242,7 @@ struct boss_black_knightAI : public ScriptedAI
                 DoScriptText(SAY_PHASE_2, m_creature);
                 m_creature->SetDisplayId(MODEL_ID_SKELETON);
 
-                m_uiArmyTimer = DoCastSpellIfCan(m_creature, SPELL_ARMY_OF_THE_DEAD) == CAST_OK ? 0 : 500;
+                DoCastSpellIfCan(m_creature, SPELL_ARMY_OF_THE_DEAD);
             }
             else if (m_uiPhase == PHASE_GHOST)
             {
@@ -273,45 +254,11 @@ struct boss_black_knightAI : public ScriptedAI
         }
     }
 
-    void UpdateResurrection(const uint32 uiDiff)
-    {
-        if (m_uiPhase != PHASE_TRANSITION || !m_creature->IsAlive() || !m_creature->IsInCombat())
-            return;
-        if (m_uiResurrectionTimer > uiDiff)
-        {
-            m_uiResurrectionTimer -= uiDiff;
-            return;
-        }
-        if (m_creature->HasAura(SPELL_FEIGN_DEATH))
-        {
-            m_uiResurrectionTimer = 1000;
-            return;
-        }
-        // Retry a rejected/missing feign aura without bypassing the native resurrection spell.
-        m_uiResurrectionTimer = DoCastSpellIfCan(m_creature, SPELL_FEIGN_DEATH, CAST_TRIGGERED) == CAST_OK ? 6000 : 500;
-    }
-
-    void UpdateArmy(const uint32 uiDiff)
-    {
-        if (m_uiPhase != PHASE_SKELETON || !m_uiArmyTimer)
-            return;
-        if (m_uiArmyTimer > uiDiff)
-            m_uiArmyTimer -= uiDiff;
-        else
-            m_uiArmyTimer = DoCastSpellIfCan(m_creature, SPELL_ARMY_OF_THE_DEAD) == CAST_OK ? 0 : 500;
-    }
-
     void UpdateAI(const uint32 uiDiff) override
     {
-        if (m_uiPhase == PHASE_TRANSITION)
-        {
-            UpdateResurrection(uiDiff);
-            return;
-        }
         if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
             return;
 
-        UpdateArmy(uiDiff);
         switch (m_uiPhase)
         {
             case PHASE_DEATH_KNIGHT:
@@ -413,7 +360,7 @@ struct BlackKnightRes : public SpellScript
     {
         Unit* caster = spell->GetCaster();
         Unit* target = spell->GetUnitTarget();
-        if (target && target->AI())
+        if (target->AI())
             target->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, caster, target);
     }
 };

@@ -24,7 +24,6 @@ EndScriptData */
 #include "AI/ScriptDevAI/include/sc_common.h"
 #include "ulduar.h"
 #include "Entities/TemporarySpawn.h"
-#include "Spells/SpellAuras.h"
 
 enum
 {
@@ -101,22 +100,6 @@ static const float afKoloArmsLoc[4] = {1797.15f, -24.4027f, 448.741f, 3.1939f};
 ## boss_kologarn
 ######*/
 
-static void ClearKologarnPlayerGrip(Unit* player)
-{
-    if (!player || player->GetTypeId() != TYPEID_PLAYER) return;
-    for (uint32 id : {62056u, 63985u, 64290u, 64292u, 63962u, 64708u})
-        player->RemoveAurasDueToSpell(id);
-}
-
-static void ReleaseKologarnArm(Unit* arm)
-{
-    if (!arm || arm->GetTypeId() != TYPEID_UNIT || arm->GetEntry() != NPC_RIGHT_ARM) return;
-    // Native CONTROL_VEHICLE removal unboards each passenger. The aura hook
-    // below also clears its separately self-cast stun and damage auras.
-    arm->RemoveAurasDueToSpell(62056);
-    arm->RemoveAurasDueToSpell(63985);
-}
-
 struct boss_kologarnAI : public Scripted_NoMovementAI
 {
     boss_kologarnAI(Creature* pCreature) : Scripted_NoMovementAI(pCreature)
@@ -147,17 +130,8 @@ struct boss_kologarnAI : public Scripted_NoMovementAI
     uint8 m_uiRubbleCount;
     uint32 m_uiDisarmedTimer;
 
-    void ClearAllGrips()
-    {
-        if (m_pInstance)
-            ReleaseKologarnArm(m_pInstance->GetSingleCreatureFromStorage(NPC_RIGHT_ARM));
-        for (auto const& reference : m_creature->GetMap()->GetPlayers())
-            ClearKologarnPlayerGrip(reference.getSource());
-    }
-
     void Reset() override
     {
-        ClearAllGrips();
         m_uiMountArmsTimer          = 5000;
         m_uiBerserkTimer            = 10 * MINUTE * IN_MILLISECONDS;
 
@@ -180,7 +154,6 @@ struct boss_kologarnAI : public Scripted_NoMovementAI
 
     void JustDied(Unit* /*pKiller*/) override
     {
-        ClearAllGrips();
         if (m_pInstance)
             m_pInstance->SetData(TYPE_KOLOGARN, DONE);
 
@@ -209,7 +182,6 @@ struct boss_kologarnAI : public Scripted_NoMovementAI
 
     void JustReachedHome() override
     {
-        ClearAllGrips();
         if (m_pInstance)
             m_pInstance->SetData(TYPE_KOLOGARN, FAIL);
 
@@ -264,7 +236,6 @@ struct boss_kologarnAI : public Scripted_NoMovementAI
 
     void SummonedCreatureJustDied(Creature* pSummoned) override
     {
-        ReleaseKologarnArm(pSummoned);
         if (!m_creature->IsAlive() || !m_creature->GetVictim())
             return;
 
@@ -276,7 +247,7 @@ struct boss_kologarnAI : public Scripted_NoMovementAI
                 {
                     pStalker->CastSpell(pStalker, m_bIsRegularMode ? SPELL_FALLING_RUBBLE : SPELL_FALLING_RUBBLE_H, TRIGGERED_OLD_TRIGGERED);
                     pStalker->CastSpell(pStalker, SPELL_SUMMON_RUBBLE, TRIGGERED_OLD_TRIGGERED);
-
+                    pStalker->CastSpell(pStalker, SPELL_CANCEL_STONE_GRIP, TRIGGERED_OLD_TRIGGERED);
                 }
 
                 m_pInstance->SetSpecialAchievementCriteria(TYPE_ACHIEV_OPEN_ARMS, false);
@@ -525,12 +496,7 @@ struct npc_focused_eyebeamAI : public ScriptedAI
             m_pInstance->SetSpecialAchievementCriteria(TYPE_ACHIEV_LOOKS_KILL, false);
     }
 
-    void UpdateAI(const uint32 /*uiDiff*/) override
-    {
-        Creature* boss = m_pInstance ? m_pInstance->GetSingleCreatureFromStorage(NPC_KOLOGARN) : nullptr;
-        if (!boss || !boss->IsAlive() || m_pInstance->GetData(TYPE_KOLOGARN) != IN_PROGRESS)
-            m_creature->ForcedDespawn();
-    }
+    void UpdateAI(const uint32 /*uiDiff*/) override { }
 };
 
 UnitAI* GetAI_npc_focused_eyebeam(Creature* pCreature)
@@ -574,84 +540,8 @@ UnitAI* GetAI_npc_rubble_stalker(Creature* pCreature)
     return new npc_rubble_stalkerAI(pCreature);
 }
 
-struct KologarnEyebeamSummon : public SpellScript
-{
-    void OnSummon(Spell* spell, Creature* summon) const override
-    {
-        if (!summon || (summon->GetEntry() != NPC_FOCUSED_EYEBEAM_LEFT &&
-            summon->GetEntry() != NPC_FOCUSED_EYEBEAM_RIGHT)) return;
-        Unit* player = spell->GetCaster();
-        if (!player || player->GetTypeId() != TYPEID_PLAYER || !player->IsAlive() ||
-            !player->IsInMap(summon) || summon->GetSpawnerGuid() != player->GetObjectGuid()) return;
-        auto* instance = dynamic_cast<instance_ulduar*>(summon->GetInstanceData());
-        Creature* boss = instance ? instance->GetSingleCreatureFromStorage(NPC_KOLOGARN) : nullptr;
-        if (!boss || !boss->IsAlive() || !boss->AI() || instance->GetData(TYPE_KOLOGARN) != IN_PROGRESS)
-        {
-            summon->ForcedDespawn();
-            return;
-        }
-        // FORCE_CAST made the selected player summon the markers. It does not
-        // carry the boss as original caster, so native JustSummoned otherwise
-        // misses their beams, lifetime and pursuit initialization.
-        if (spell->GetAffectiveCaster() != boss)
-            boss->AI()->JustSummoned(summon);
-    }
-};
-
-struct CancelKologarnStoneGrip : public SpellScript
-{
-    void OnEffectExecute(Spell* spell, SpellEffectIndex effect) const override
-    {
-        if (effect == EFFECT_INDEX_0)
-            ReleaseKologarnArm(spell->GetUnitTarget());
-    }
-};
-
-struct KologarnStoneGripAbsorb : public AuraScript
-{
-    void OnApply(Aura* aura, bool apply) const override
-    {
-        // Ordinary linked-aura teardown must not release a new/other grip.
-        if (!apply && aura->GetEffIndex() == EFFECT_INDEX_0 &&
-            aura->GetRemoveMode() == AURA_REMOVE_BY_SHIELD_BREAK)
-            ReleaseKologarnArm(aura->GetTarget());
-    }
-};
-
-struct KologarnStoneGrip : public AuraScript
-{
-    void OnApply(Aura* aura, bool apply) const override
-    {
-        if (apply) return;
-        if (aura->GetEffIndex() == EFFECT_INDEX_0)
-        {
-            Unit* arm = aura->GetTarget();
-            if (arm && arm->GetEntry() == NPC_RIGHT_ARM)
-                ClearKologarnPlayerGrip(aura->GetCaster());
-        }
-        else if (aura->GetEffIndex() == EFFECT_INDEX_2)
-        {
-            Unit* player = aura->GetTarget();
-            if (!player || player->GetTypeId() != TYPEID_PLAYER) return;
-            // Death/logout or stun removal must also release this player's
-            // arm-side vehicle aura. Never eject the other grabbed players.
-            if (auto* instance = dynamic_cast<instance_ulduar*>(player->GetInstanceData()))
-                if (Creature* arm = instance->GetSingleCreatureFromStorage(NPC_RIGHT_ARM))
-                    arm->RemoveAurasByCasterSpell(aura->GetId(), player->GetObjectGuid());
-            player->RemoveAurasDueToSpell(aura->GetId() == 62056 ? 64290 : 64292);
-            player->RemoveAurasDueToSpell(63962);
-            player->RemoveAurasDueToSpell(64708);
-        }
-    }
-};
-
 void AddSC_boss_kologarn()
 {
-    RegisterSpellScript<KologarnEyebeamSummon>("spell_kologarn_eyebeam_summon");
-    RegisterSpellScript<CancelKologarnStoneGrip>("spell_cancel_kologarn_stone_grip");
-    RegisterSpellScript<KologarnStoneGripAbsorb>("spell_kologarn_stone_grip_absorb");
-    RegisterSpellScript<KologarnStoneGrip>("spell_kologarn_stone_grip");
-
     Script* pNewScript = new Script;
     pNewScript->Name = "boss_kologarn";
     pNewScript->GetAI = GetAI_boss_kologarn;

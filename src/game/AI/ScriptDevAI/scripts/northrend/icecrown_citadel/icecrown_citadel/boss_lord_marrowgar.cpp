@@ -287,7 +287,7 @@ struct boss_lord_marrowgarAI : public ScriptedAI
         {
             if (m_uiBerserkTimer <= uiDiff)
             {
-                if (DoCastSpellIfCan(m_creature, SPELL_BERSERK) == CAST_OK)
+                if (DoCastSpellIfCan(m_creature, SPELL_BERSERK))
                 {
                     DoScriptText(SAY_BERSERK, m_creature);
                     m_uiBerserkTimer = 0;

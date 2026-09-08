@@ -17,13 +17,12 @@
 /* ScriptData
 SDName: Boss_Tharonja
 SD%Complete: 80%
-SDComment: Encounter timing still needs live verification
+SDComment: Encounter mechanic is not verified, spell CLEAR_GIFT_OF_THARONJA need core support
 SDCategory: Drak'Tharon Keep
 EndScriptData */
 
 #include "AI/ScriptDevAI/include/sc_common.h"
 #include "Globals/ObjectMgr.h"
-#include "Spells/Scripts/SpellScript.h"
 #include "draktharon_keep.h"
 
 enum
@@ -96,18 +95,8 @@ struct boss_tharonjaAI : public ScriptedAI
     uint32 m_uiPoisonCloudTimer;
     uint32 m_uiReturnFleshTimer;
 
-    void ClearPlayerForms()
-    {
-        // Lifecycle cleanup must reach dead/out-of-range players too and must
-        // not depend on a dead or evading boss successfully casting a spell.
-        for (auto const& reference : m_creature->GetMap()->GetPlayers())
-            if (Player* player = reference.getSource())
-                player->RemoveAurasByCasterSpell(SPELL_GIFT_OF_THARONJA, m_creature->GetObjectGuid());
-    }
-
     void Reset() override
     {
-        ClearPlayerForms();
         m_uiPhase = PHASE_SKELETAL;
 
         m_uiCurseLifeTimer = urand(15000, 20000);
@@ -138,7 +127,9 @@ struct boss_tharonjaAI : public ScriptedAI
 
         DoCastSpellIfCan(m_creature, SPELL_ACHIEVEMENT_CHECK, CAST_TRIGGERED | CAST_FORCE_CAST);
 
-        ClearPlayerForms();
+        // TODO check if this spell casting is infact also needed on phase-switch or only here (possible that there is also some sort of hp% dependency
+        if (m_uiPhase == PHASE_FLESH)
+            DoCastSpellIfCan(m_creature, SPELL_CLEAR_GIFT_OF_THARONJA, CAST_TRIGGERED | CAST_FORCE_CAST);
 
         if (m_pInstance)
             m_pInstance->SetData(TYPE_THARONJA, DONE);
@@ -146,7 +137,6 @@ struct boss_tharonjaAI : public ScriptedAI
 
     void JustReachedHome() override
     {
-        ClearPlayerForms();
         // Reset Display ID
         if (CreatureInfo const* pCreatureInfo = GetCreatureTemplateStore(NPC_THARONJA_SKELETAL))
         {
@@ -273,7 +263,6 @@ struct boss_tharonjaAI : public ScriptedAI
                 // Turn players into normal
                 if (DoCastSpellIfCan(m_creature, SPELL_CLEAR_GIFT_OF_THARONJA) == CAST_OK)
                 {
-                    ClearPlayerForms();
                     // Change modell - might be UpdateEntry
                     if (CreatureInfo const* pCreatureInfo = GetCreatureTemplateStore(NPC_THARONJA_SKELETAL))
                     {
@@ -293,24 +282,10 @@ UnitAI* GetAI_boss_tharonja(Creature* pCreature)
     return new boss_tharonjaAI(pCreature);
 }
 
-struct ClearGiftOfTharonja : public SpellScript
-{
-    void OnEffectExecute(Spell* spell, SpellEffectIndex effect) const override
-    {
-        if (effect != EFFECT_INDEX_0 || !spell->GetCaster())
-            return;
-        if (Unit* target = spell->GetUnitTarget())
-            if (target->GetTypeId() == TYPEID_PLAYER)
-                target->RemoveAurasByCasterSpell(SPELL_GIFT_OF_THARONJA, spell->GetCaster()->GetObjectGuid());
-    }
-};
-
 void AddSC_boss_tharonja()
 {
     Script* pNewScript = new Script;
     pNewScript->Name = "boss_tharonja";
     pNewScript->GetAI = &GetAI_boss_tharonja;
     pNewScript->RegisterSelf();
-
-    RegisterSpellScript<ClearGiftOfTharonja>("spell_clear_gift_of_tharonja");
 }

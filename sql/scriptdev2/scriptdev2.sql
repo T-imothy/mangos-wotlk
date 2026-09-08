@@ -11395,5 +11395,3 @@ INSERT INTO script_waypoint (Entry, PathId, Point, PositionX, PositionY, Positio
 (32800,0,26,7067.66,3420.74,694.879,0,0,0,'');
 
 -- EOF
-
-UPDATE creature_template SET AIName='', ScriptName='npc_sindragosa_ice_tomb' WHERE Entry=36980;

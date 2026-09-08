@@ -126,11 +126,7 @@ struct npc_web_wrapAI : public ScriptedAI
             if (Player* victim = m_creature->GetMap()->GetPlayer(m_victimGuid))
             {
                 if (victim->IsAlive())
-                {
-                    // The boss selection spell is not the player's wrap aura.
-                    victim->RemoveAurasDueToSpell(SPELL_WEBWRAP_STUN);
-                    victim->RemoveAurasDueToSpell(SPELL_WEB_WRAP_SUMMON);
-                }
+                    victim->RemoveAurasDueToSpell(SPELL_WEBWRAP);
                 victim->RestoreDisplayId();
             }
         }
@@ -237,10 +233,7 @@ struct WebWrapMaexxna : public SpellScript
         std::vector<Unit*> unitList;
         spell->GetCaster()->SelectAttackingTargets(unitList, ATTACKING_TARGET_ALL_SUITABLE, 1, nullptr, SELECT_FLAG_PLAYER | SELECT_FLAG_SKIP_TANK);
         std::shuffle(unitList.begin(), unitList.end(), *GetRandomGenerator());
-        // A depleted raid can have fewer eligible players than the wrap cap.
-        // Only truncate: growing this list would insert null targets.
-        if (unitList.size() > targetCount)
-            unitList.resize(targetCount);
+        unitList.resize(targetCount);
         for (Unit* target : unitList)
         {
             uint32 spellId = targetSpells[urand(0, targetSpells.size() - 1)];

@@ -1762,7 +1762,6 @@ class Player : public Unit
 
         // Dual Spec
         uint8 GetActiveSpec() const { return m_activeSpec; }
-        PlayerTalentMap const& GetActiveTalents() const { return m_talents[m_activeSpec]; }
         void SetActiveSpec(uint8 spec) { m_activeSpec = spec; }
         uint8 GetSpecsCount() const { return m_specsCount; }
         void SetSpecsCount(uint8 count) { m_specsCount = count; }

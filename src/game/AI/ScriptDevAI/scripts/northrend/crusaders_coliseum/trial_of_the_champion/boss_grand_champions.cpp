@@ -192,7 +192,7 @@ struct trial_companion_commonAI : public ScriptedAI
 
                 // search for the vehicle again, just in case the previous one was taken
                 Creature* pMount = m_creature->GetMap()->GetCreature(m_newMountGuid);
-                if (!pMount || pMount->HasAura(SPELL_RIDE_ARGENT_VEHICLE))
+                if (pMount->HasAura(SPELL_RIDE_ARGENT_VEHICLE))
                     pMount = GetClosestCreatureWithEntry(m_creature, uiMountEntry, 60.0f);
 
                 // if we don't have any mount send an error

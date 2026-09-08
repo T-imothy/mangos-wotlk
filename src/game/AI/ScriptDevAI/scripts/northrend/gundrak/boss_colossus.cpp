@@ -112,8 +112,8 @@ struct boss_drakkari_elementalAI : public BossAI
             {
                 if (m_creature->GetHealthPercent() < 50.0f)
                 {
-                    if (DoCastSpellIfCan(nullptr, SPELL_MERGE, CAST_INTERRUPT_PREVIOUS) == CAST_OK)
-                        DisableCombatAction(action);
+                    DoCastSpellIfCan(nullptr, SPELL_MERGE, CAST_INTERRUPT_PREVIOUS);
+                    DisableCombatAction(action);
                 }
                 return;
             }
@@ -210,11 +210,11 @@ struct boss_drakkari_colossusAI : public BossAI
         }
     }
 
-    bool DoEmergeElemental()
+    void DoEmergeElemental()
     {
         // Avoid casting the merge spell twice
         if (m_creature->HasAura(SPELL_FREEZE_ANIM))
-            return true;
+            return;
 
         if (DoCastSpellIfCan(m_creature, SPELL_EMERGE, CAST_INTERRUPT_PREVIOUS) == CAST_OK)
         {
@@ -224,9 +224,7 @@ struct boss_drakkari_colossusAI : public BossAI
             m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_PLAYER);
             m_creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_STUNNED);
             DoCastSpellIfCan(nullptr, SPELL_FREEZE_ANIM, CAST_TRIGGERED);
-            return true;
         }
-        return false;
     }
 
     // Wrapper to prepare the Colossus
@@ -251,15 +249,15 @@ struct boss_drakkari_colossusAI : public BossAI
             {
                 if (m_firstEmerge && m_creature->GetHealthPercent() < 50.0f)
                 {
-                    if (DoEmergeElemental())
-                        DisableCombatAction(action);
+                    DoEmergeElemental();
+                    DisableCombatAction(action);
                 }
                 return;
             }
             case COLOSSUS_MORTAL_STRIKES:
             {
-                if (DoCastSpellIfCan(nullptr, m_isRegularMode ? SPELL_MORTAL_STRIKES : SPELL_MORTAL_STRIKES_H) == CAST_OK)
-                    DisableCombatAction(action);
+                DoCastSpellIfCan(nullptr, m_isRegularMode ? SPELL_MORTAL_STRIKES : SPELL_MORTAL_STRIKES_H);
+                DisableCombatAction(action);
                 return;
             }
         }

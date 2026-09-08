@@ -184,7 +184,6 @@ struct boss_halion_realAI : public ScriptedAI
         m_uiCleaveTimer             = urand(5000, 10000);
         m_uiFieryCombustionTimer    = 15000;
         m_uiMeteorTimer             = 20000;
-        m_uiFlameBreathTimer        = 15000;
     }
 
     void Aggro(Unit* /*pWho*/) override
