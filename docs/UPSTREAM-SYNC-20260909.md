@@ -2,7 +2,7 @@
 
 CMaNGOS authority: `2448954ee7611b2f580119f789bfd14116922250`.
 Incoming upstream commits: 5.
-Playerbots dependency: `7f45ddd8ae9fa8830f9231544ac2fae3126e92f5`.
+Playerbots dependency: `70fe52044e3613e52ab1a5bc8ad7346888177c29`.
 
 c38787ca8f Unit: Name flag HITINFO_RAGE_GAIN and add use
 e1376b0ff8 Unit: Fix crash due to rage gain code not being safeguarded for cleandamage
