@@ -82,7 +82,7 @@ namespace
 
         // The existing mail path commits the item, mail, attachment and unique
         // grant key together before another login/backfill can grant it again.
-        MailDraft draft(subject);
+        MailDraft draft(subject, "");
         draft.AddItem(item).SetGrantKey(grantKey).SendMailTo(
             MailReceiver(onlinePlayer, characterGuid),
             MailSender(MAIL_NORMAL, uint32(0), MAIL_STATIONERY_GM),

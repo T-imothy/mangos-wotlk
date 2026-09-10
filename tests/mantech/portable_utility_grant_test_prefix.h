@@ -62,7 +62,7 @@ struct MailReceiver {MailReceiver(Player*,ObjectGuid){} };
 struct MailSender {MailSender(int,uint32,int){} };
 struct MailDraft {
     Item* item=nullptr;std::string key;
-    MailDraft(char const*){}
+    MailDraft(char const*, char const*){}
     MailDraft& AddItem(Item* p){item=p;return *this;}
     MailDraft& SetGrantKey(char const* k){key=k;return *this;}
     void SendMailTo(MailReceiver,MailSender,int){
