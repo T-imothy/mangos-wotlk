@@ -4846,6 +4846,7 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
                 while (resultFriend->NextRow());
             }
 
+            CharacterDatabase.PExecute("DELETE FROM character_dungeon_travel WHERE guid = '%u'", lowguid);
             CharacterDatabase.PExecute("DELETE FROM characters WHERE guid = '%u'", lowguid);
             CharacterDatabase.PExecute("DELETE FROM character_account_data WHERE guid = '%u'", lowguid);
             CharacterDatabase.PExecute("DELETE FROM character_declinedname WHERE guid = '%u'", lowguid);

@@ -2779,6 +2779,7 @@ bool DungeonMap::Add(Player* player)
 
     // this will acquire the same mutex so it cannot be in the previous block
     Map::Add(player);
+    player->RecordDungeonTravelVisit();
 
     return true;
 }

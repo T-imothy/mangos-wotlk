@@ -3405,5 +3405,6 @@
       "inside": false,
       "reason": "ok"
     }
-  ]
+  ],
+  "unlock_policy": "Per character, successful first entry into instance_map; all available keys sharing that map unlock together. No historical backfill."
 }
