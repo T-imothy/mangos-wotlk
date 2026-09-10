@@ -3351,7 +3351,7 @@ SpellCastResult Spell::SpellStart(SpellCastTargets const* targets, Aura* trigger
     if (result != SPELL_CAST_OK)
     {
         SendCastResult(result);
-        if (m_CastItem && (m_CastItem->GetEntry() == 65000 || m_CastItem->GetEntry() == 65001))
+        if (m_CastItem && (m_CastItem->GetEntry() == 65000 || m_CastItem->GetEntry() == 65001 || m_CastItem->GetEntry() == 65002))
             SendInterrupted(result);
         finish(false);
         return result;
@@ -4085,7 +4085,7 @@ void Spell::SendSpellCooldown()
     // Do not leave their cooldowns on hold: an on-hold cooldown is not
     // persisted at logout, which would let the item be reused after relogging.
     bool const portableUtility = m_CastItem &&
-        (m_CastItem->GetEntry() == 65000 || m_CastItem->GetEntry() == 65001);
+        (m_CastItem->GetEntry() == 65000 || m_CastItem->GetEntry() == 65001 || m_CastItem->GetEntry() == 65002);
     if (portableUtility)
         permanent = false;
 
