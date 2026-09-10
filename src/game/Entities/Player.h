@@ -2897,7 +2897,6 @@ class Player : public Unit
 
         bool m_expectingChangeTransport;
     private:
-        bool m_dungeonTravelUnlocksLoaded = false;
         std::set<std::string> m_dungeonTravelUnlocks;
 
         void _HandleDeadlyPoison(Unit* Target, WeaponAttackType attType, SpellEntry const* spellInfo);
