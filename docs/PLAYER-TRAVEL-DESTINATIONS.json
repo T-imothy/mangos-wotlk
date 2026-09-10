@@ -1,0 +1,3409 @@
+{
+  "expansion": "wotlk",
+  "audit_date": "2026-09-09",
+  "database_version": [
+    {
+      "version": "WoTLKDB v1.9+ 'Icecrown' for CMaNGOS-WOTLK 14092",
+      "creature_ai_version": "ACID 3.3.5a (Wrath of the Lich King) for CMaNGOS-WOTLK (3.3.5a Client)",
+      "cache_id": "1",
+      "required_14104_01_mangos_spell_threat_mask": "NULL",
+      "content_5863_q.11471": "NULL"
+    }
+  ],
+  "database_checkout": {
+    "branch": "mantech-wotlk",
+    "revision": "af03f769af8c70beb12d3edd0aca49336e01e65b"
+  },
+  "source_snapshot_sha256": "537fb1ef6fd28e4053abecd04ffd7952b7f8872371dffe33dcb66ba6d9a36c18",
+  "dbc_sha256": {
+    "Map.dbc": "261bd7c2c9dbdba1f2966ca21106673ed722c2e3681d227f1eed261b6ce870d5",
+    "AreaTrigger.dbc": "c043300ffae75d78374bcdde57c397ef8d07c2269d1d81d57acab44567d9866c"
+  },
+  "validation": "Exact source coordinate and entry-trigger comparison; DBC map type; controlled parser/routing; no live character teleport",
+  "destinations": [
+    {
+      "key": "ragefire_chasm",
+      "display": "Ragefire Chasm",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "726",
+          "position_x": "1811.78",
+          "position_y": "-4410.5",
+          "position_z": "-18.4704",
+          "orientation": "5.20165",
+          "map": "1",
+          "name": "RagefireChasm",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "rfc"
+      ],
+      "instance_map": 389,
+      "available": true,
+      "entry_trigger": 2230,
+      "minimum_level": 8,
+      "note": "",
+      "point": {
+        "x": 0.797643,
+        "y": -8.23429,
+        "z": -15.5288,
+        "o": 4.71239,
+        "map": 389
+      },
+      "source": {
+        "table": "areatrigger_teleport",
+        "id": 2230,
+        "name": "Ragefire Chasm - Entering"
+      },
+      "inside": true,
+      "reason": "ok"
+    },
+    {
+      "key": "deadmines",
+      "display": "The Deadmines",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "260",
+          "position_x": "-16.4",
+          "position_y": "-383.07",
+          "position_z": "61.78",
+          "orientation": "2.52637",
+          "map": "36",
+          "name": "Deadmines",
+          "outdoor": false
+        },
+        {
+          "id": "1041",
+          "position_x": "-11208.7",
+          "position_y": "1673.52",
+          "position_z": "24.6361",
+          "orientation": "1.51067",
+          "map": "0",
+          "name": "TheDeadmines",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "dm",
+        "vc"
+      ],
+      "instance_map": 36,
+      "available": true,
+      "entry_trigger": 78,
+      "minimum_level": 10,
+      "note": "",
+      "point": {
+        "x": -11208.7,
+        "y": 1673.52,
+        "z": 24.6361,
+        "o": 1.51067,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1041,
+        "name": "TheDeadmines"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "wailing_caverns",
+      "display": "Wailing Caverns",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1191",
+          "position_x": "-805.049",
+          "position_y": "-2032.03",
+          "position_z": "95.8796",
+          "orientation": "6.18912",
+          "map": "1",
+          "name": "TheWailingCaverns",
+          "outdoor": true
+        },
+        {
+          "id": "1303",
+          "position_x": "-731.607",
+          "position_y": "-2218.39",
+          "position_z": "17.0281",
+          "orientation": "2.78486",
+          "map": "1",
+          "name": "WailingCaverns",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "wc"
+      ],
+      "instance_map": 43,
+      "available": true,
+      "entry_trigger": 228,
+      "minimum_level": 10,
+      "note": "",
+      "point": {
+        "x": -805.049,
+        "y": -2032.03,
+        "z": 95.8796,
+        "o": 6.18912,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1191,
+        "name": "TheWailingCaverns"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "shadowfang_keep",
+      "display": "Shadowfang Keep",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "836",
+          "position_x": "-234.675",
+          "position_y": "1561.63",
+          "position_z": "76.8921",
+          "orientation": "1.24031",
+          "map": "0",
+          "name": "ShadowFangKeep",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "sfk"
+      ],
+      "instance_map": 33,
+      "available": true,
+      "entry_trigger": 145,
+      "minimum_level": 10,
+      "note": "",
+      "point": {
+        "x": -234.675,
+        "y": 1561.63,
+        "z": 76.8921,
+        "o": 1.24031,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 836,
+        "name": "ShadowFangKeep"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "blackfathom_deeps",
+      "display": "Blackfathom Deeps",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "98",
+          "position_x": "4249.99",
+          "position_y": "740.102",
+          "position_z": "-25.671",
+          "orientation": "1.34062",
+          "map": "1",
+          "name": "BlackfathomDeeps",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "bfd"
+      ],
+      "instance_map": 48,
+      "available": true,
+      "entry_trigger": 257,
+      "minimum_level": 19,
+      "note": "",
+      "point": {
+        "x": 4249.99,
+        "y": 740.102,
+        "z": -25.671,
+        "o": 1.34062,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 98,
+        "name": "BlackfathomDeeps"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "stockade",
+      "display": "The Stockade",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [],
+      "short_aliases": [
+        "stock",
+        "stocks"
+      ],
+      "instance_map": 34,
+      "available": true,
+      "entry_trigger": 101,
+      "minimum_level": 15,
+      "note": "",
+      "point": {
+        "x": 48.9849,
+        "y": 0.483882,
+        "z": -16.3942,
+        "o": 0.0,
+        "map": 34
+      },
+      "source": {
+        "table": "areatrigger_teleport",
+        "id": 101,
+        "name": "Stormwind Stockades - Entering"
+      },
+      "inside": true,
+      "reason": "ok"
+    },
+    {
+      "key": "gnomeregan",
+      "display": "Gnomeregan",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "427",
+          "position_x": "-5163.54",
+          "position_y": "925.423",
+          "position_z": "257.181",
+          "orientation": "1.57423",
+          "map": "0",
+          "name": "Gnomeregan",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "gnomer"
+      ],
+      "instance_map": 90,
+      "available": true,
+      "entry_trigger": 324,
+      "minimum_level": 20,
+      "note": "",
+      "point": {
+        "x": -5163.54,
+        "y": 925.423,
+        "z": 257.181,
+        "o": 1.57423,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 427,
+        "name": "Gnomeregan"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "razorfen_kraul",
+      "display": "Razorfen Kraul",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "744",
+          "position_x": "-4470.28",
+          "position_y": "-1677.77",
+          "position_z": "81.3925",
+          "orientation": "1.16302",
+          "map": "1",
+          "name": "RazorfenKraul",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "rfk"
+      ],
+      "instance_map": 47,
+      "available": true,
+      "entry_trigger": 244,
+      "minimum_level": 17,
+      "note": "",
+      "point": {
+        "x": -4470.28,
+        "y": -1677.77,
+        "z": 81.3925,
+        "o": 1.16302,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 744,
+        "name": "RazorfenKraul"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "scarlet_graveyard",
+      "display": "Scarlet Monastery: Graveyard",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "814",
+          "position_x": "2872.6",
+          "position_y": "-764.398",
+          "position_z": "160.332",
+          "orientation": "5.05735",
+          "map": "0",
+          "name": "ScarletMonastery",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "sm",
+        "smgy"
+      ],
+      "instance_map": 189,
+      "available": true,
+      "entry_trigger": 45,
+      "minimum_level": 20,
+      "note": "Shared Scarlet Monastery approach; walk to the selected wing.",
+      "point": {
+        "x": 2872.6,
+        "y": -764.398,
+        "z": 160.332,
+        "o": 5.05735,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 814,
+        "name": "ScarletMonastery"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "scarlet_library",
+      "display": "Scarlet Monastery: Library",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "814",
+          "position_x": "2872.6",
+          "position_y": "-764.398",
+          "position_z": "160.332",
+          "orientation": "5.05735",
+          "map": "0",
+          "name": "ScarletMonastery",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "smlib"
+      ],
+      "instance_map": 189,
+      "available": true,
+      "entry_trigger": 614,
+      "minimum_level": 20,
+      "note": "Shared Scarlet Monastery approach; walk to the selected wing.",
+      "point": {
+        "x": 2872.6,
+        "y": -764.398,
+        "z": 160.332,
+        "o": 5.05735,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 814,
+        "name": "ScarletMonastery"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "scarlet_armory",
+      "display": "Scarlet Monastery: Armory",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "814",
+          "position_x": "2872.6",
+          "position_y": "-764.398",
+          "position_z": "160.332",
+          "orientation": "5.05735",
+          "map": "0",
+          "name": "ScarletMonastery",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "smarm"
+      ],
+      "instance_map": 189,
+      "available": true,
+      "entry_trigger": 612,
+      "minimum_level": 20,
+      "note": "Shared Scarlet Monastery approach; walk to the selected wing.",
+      "point": {
+        "x": 2872.6,
+        "y": -764.398,
+        "z": 160.332,
+        "o": 5.05735,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 814,
+        "name": "ScarletMonastery"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "scarlet_cathedral",
+      "display": "Scarlet Monastery: Cathedral",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "814",
+          "position_x": "2872.6",
+          "position_y": "-764.398",
+          "position_z": "160.332",
+          "orientation": "5.05735",
+          "map": "0",
+          "name": "ScarletMonastery",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "smcath"
+      ],
+      "instance_map": 189,
+      "available": true,
+      "entry_trigger": 610,
+      "minimum_level": 20,
+      "note": "Shared Scarlet Monastery approach; walk to the selected wing.",
+      "point": {
+        "x": 2872.6,
+        "y": -764.398,
+        "z": 160.332,
+        "o": 5.05735,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 814,
+        "name": "ScarletMonastery"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "razorfen_downs",
+      "display": "Razorfen Downs",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "743",
+          "position_x": "-4657.3",
+          "position_y": "-2519.35",
+          "position_z": "81.0529",
+          "orientation": "4.54808",
+          "map": "1",
+          "name": "RazorfenDowns",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "rfd"
+      ],
+      "instance_map": 129,
+      "available": true,
+      "entry_trigger": 442,
+      "minimum_level": 25,
+      "note": "",
+      "point": {
+        "x": -4657.3,
+        "y": -2519.35,
+        "z": 81.0529,
+        "o": 4.54808,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 743,
+        "name": "RazorfenDowns"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "uldaman",
+      "display": "Uldaman",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1258",
+          "position_x": "-6071.37",
+          "position_y": "-2955.16",
+          "position_z": "209.782",
+          "orientation": "0.015708",
+          "map": "0",
+          "name": "Uldaman",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "ulda"
+      ],
+      "instance_map": 70,
+      "available": true,
+      "entry_trigger": 286,
+      "minimum_level": 30,
+      "note": "",
+      "point": {
+        "x": -6071.37,
+        "y": -2955.16,
+        "z": 209.782,
+        "o": 0.015708,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1258,
+        "name": "Uldaman"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "zulfarrak",
+      "display": "Zul'Farrak",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1375",
+          "position_x": "-6801.19",
+          "position_y": "-2893.02",
+          "position_z": "9.00388",
+          "orientation": "0.158639",
+          "map": "1",
+          "name": "ZulFarrak",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "zf"
+      ],
+      "instance_map": 209,
+      "available": true,
+      "entry_trigger": 924,
+      "minimum_level": 35,
+      "note": "",
+      "point": {
+        "x": -6801.19,
+        "y": -2893.02,
+        "z": 9.00388,
+        "o": 0.158639,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1375,
+        "name": "ZulFarrak"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "maraudon",
+      "display": "Maraudon",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "603",
+          "position_x": "-1419.13",
+          "position_y": "2908.14",
+          "position_z": "137.464",
+          "orientation": "1.57366",
+          "map": "1",
+          "name": "Maraudon",
+          "outdoor": true
+        },
+        {
+          "id": "604",
+          "position_x": "-1464.14",
+          "position_y": "2615.21",
+          "position_z": "76.7172",
+          "orientation": "3.21357",
+          "map": "1",
+          "name": "MaraudonOrange",
+          "outdoor": true
+        },
+        {
+          "id": "605",
+          "position_x": "-1188.37",
+          "position_y": "2879.61",
+          "position_z": "85.7888",
+          "orientation": "5.07366",
+          "map": "1",
+          "name": "MaraudonPurple",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "mara"
+      ],
+      "instance_map": 349,
+      "available": true,
+      "entry_trigger": 3133,
+      "minimum_level": 35,
+      "note": "",
+      "point": {
+        "x": -1419.13,
+        "y": 2908.14,
+        "z": 137.464,
+        "o": 1.57366,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 603,
+        "name": "Maraudon"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "sunken_temple",
+      "display": "The Temple of Atal'Hakkar",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "991",
+          "position_x": "-10450.3",
+          "position_y": "-3825.44",
+          "position_z": "18.0679",
+          "orientation": "6.03616",
+          "map": "0",
+          "name": "TempleOfAtalHakkar",
+          "outdoor": true
+        },
+        {
+          "id": "1167",
+          "position_x": "-10177.9",
+          "position_y": "-3994.9",
+          "position_z": "-111.239",
+          "orientation": "6.01885",
+          "map": "0",
+          "name": "TheSunkenTemple",
+          "outdoor": true
+        },
+        {
+          "id": "1175",
+          "position_x": "-10449.5",
+          "position_y": "-3827.47",
+          "position_z": "18.0675",
+          "orientation": "6.04945",
+          "map": "0",
+          "name": "TheTempleOfAtalHakkar",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "st"
+      ],
+      "instance_map": 109,
+      "available": true,
+      "entry_trigger": 446,
+      "minimum_level": 35,
+      "note": "",
+      "point": {
+        "x": -10450.3,
+        "y": -3825.44,
+        "z": 18.0679,
+        "o": 6.03616,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 991,
+        "name": "TempleOfAtalHakkar"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "blackrock_depths",
+      "display": "Blackrock Depths",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "100",
+          "position_x": "-7179.34",
+          "position_y": "-921.212",
+          "position_z": "165.821",
+          "orientation": "5.09599",
+          "map": "0",
+          "name": "BlackrockDepths",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "brd"
+      ],
+      "instance_map": 230,
+      "available": true,
+      "entry_trigger": 1466,
+      "minimum_level": 40,
+      "note": "",
+      "point": {
+        "x": -7179.34,
+        "y": -921.212,
+        "z": 165.821,
+        "o": 5.09599,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 100,
+        "name": "BlackrockDepths"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "lower_blackrock_spire",
+      "display": "Lower Blackrock Spire",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "103",
+          "position_x": "-7527.05",
+          "position_y": "-1226.77",
+          "position_z": "285.732",
+          "orientation": "5.29626",
+          "map": "0",
+          "name": "BlackrockSpire",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "lbrs"
+      ],
+      "instance_map": 229,
+      "available": true,
+      "entry_trigger": 1468,
+      "minimum_level": 45,
+      "note": "",
+      "point": {
+        "x": -7527.05,
+        "y": -1226.77,
+        "z": 285.732,
+        "o": 5.29626,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 103,
+        "name": "BlackrockSpire"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "upper_blackrock_spire",
+      "display": "Upper Blackrock Spire",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "103",
+          "position_x": "-7527.05",
+          "position_y": "-1226.77",
+          "position_z": "285.732",
+          "orientation": "5.29626",
+          "map": "0",
+          "name": "BlackrockSpire",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "ubrs"
+      ],
+      "instance_map": 229,
+      "available": true,
+      "entry_trigger": 1468,
+      "minimum_level": 45,
+      "note": "Shared Blackrock Spire entrance; follow the normal route and requirements for the upper section.",
+      "point": {
+        "x": -7527.05,
+        "y": -1226.77,
+        "z": 285.732,
+        "o": 5.29626,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 103,
+        "name": "BlackrockSpire"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "dire_maul_east",
+      "display": "Dire Maul: East",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "279",
+          "position_x": "-3980.8",
+          "position_y": "789.005",
+          "position_z": "161.007",
+          "orientation": "4.71945",
+          "map": "1",
+          "name": "DireMaulEast",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "dme"
+      ],
+      "instance_map": 429,
+      "available": true,
+      "entry_trigger": 3183,
+      "minimum_level": 45,
+      "note": "",
+      "point": {
+        "x": -3980.8,
+        "y": 789.005,
+        "z": 161.007,
+        "o": 4.71945,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 279,
+        "name": "DireMaulEast"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "dire_maul_west",
+      "display": "Dire Maul: West",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "281",
+          "position_x": "-3828.01",
+          "position_y": "1250.22",
+          "position_z": "160.226",
+          "orientation": "3.20835",
+          "map": "1",
+          "name": "DireMaulWest",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "dmw"
+      ],
+      "instance_map": 429,
+      "available": true,
+      "entry_trigger": 3186,
+      "minimum_level": 45,
+      "note": "",
+      "point": {
+        "x": -3828.01,
+        "y": 1250.22,
+        "z": 160.226,
+        "o": 3.20835,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 281,
+        "name": "DireMaulWest"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "dire_maul_north",
+      "display": "Dire Maul: North",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "280",
+          "position_x": "-3521.29",
+          "position_y": "1085.2",
+          "position_z": "161.097",
+          "orientation": "4.7281",
+          "map": "1",
+          "name": "DireMaulNorth",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "dmn"
+      ],
+      "instance_map": 429,
+      "available": true,
+      "entry_trigger": 3189,
+      "minimum_level": 45,
+      "note": "",
+      "point": {
+        "x": -3521.29,
+        "y": 1085.2,
+        "z": 161.097,
+        "o": 4.7281,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 280,
+        "name": "DireMaulNorth"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "scholomance",
+      "display": "Scholomance",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "816",
+          "position_x": "1269.64",
+          "position_y": "-2556.21",
+          "position_z": "93.6088",
+          "orientation": "0.620623",
+          "map": "0",
+          "name": "Scholomance",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "scholo"
+      ],
+      "instance_map": 289,
+      "available": true,
+      "entry_trigger": 2567,
+      "minimum_level": 45,
+      "note": "",
+      "point": {
+        "x": 1269.64,
+        "y": -2556.21,
+        "z": 93.6088,
+        "o": 0.620623,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 816,
+        "name": "Scholomance"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "stratholme",
+      "display": "Stratholme",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "958",
+          "position_x": "3352.92",
+          "position_y": "-3379.03",
+          "position_z": "144.782",
+          "orientation": "6.25978",
+          "map": "0",
+          "name": "Stratholme",
+          "outdoor": true
+        },
+        {
+          "id": "1425",
+          "position_x": "-8755.84",
+          "position_y": "-4454.57",
+          "position_z": "-200.169",
+          "orientation": "4.37",
+          "map": "1",
+          "name": "CullingOfStratholme",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "strat"
+      ],
+      "instance_map": 329,
+      "available": true,
+      "entry_trigger": 2214,
+      "minimum_level": 45,
+      "note": "",
+      "point": {
+        "x": 3352.92,
+        "y": -3379.03,
+        "z": 144.782,
+        "o": 6.25978,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 958,
+        "name": "Stratholme"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "molten_core",
+      "display": "Molten Core",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "100",
+          "position_x": "-7179.34",
+          "position_y": "-921.212",
+          "position_z": "165.821",
+          "orientation": "5.09599",
+          "map": "0",
+          "name": "BlackrockDepths",
+          "outdoor": true
+        },
+        {
+          "id": "634",
+          "position_x": "1126.64",
+          "position_y": "-459.94",
+          "position_z": "-102.535",
+          "orientation": "3.46095",
+          "map": "230",
+          "name": "MoltenCore",
+          "outdoor": false
+        }
+      ],
+      "short_aliases": [
+        "mc"
+      ],
+      "instance_map": 409,
+      "available": true,
+      "entry_trigger": 3528,
+      "minimum_level": 50,
+      "note": "Blackrock Depths approach; follow the normal route or authorized shortcut to Molten Core.",
+      "point": {
+        "x": -7179.34,
+        "y": -921.212,
+        "z": 165.821,
+        "o": 5.09599,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 100,
+        "name": "BlackrockDepths"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "onyxias_lair",
+      "display": "Onyxia's Lair (level-60 version Classic/TBC; level-80 version WotLK)",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "700",
+          "position_x": "-4708.27",
+          "position_y": "-3727.64",
+          "position_z": "54.5589",
+          "orientation": "3.72786",
+          "map": "1",
+          "name": "OnyxiasLair",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "ony"
+      ],
+      "instance_map": 249,
+      "available": true,
+      "entry_trigger": 2848,
+      "minimum_level": 50,
+      "note": "Level-80 encounter in Wrath.",
+      "point": {
+        "x": -4708.27,
+        "y": -3727.64,
+        "z": 54.5589,
+        "o": 3.72786,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 700,
+        "name": "OnyxiasLair"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "blackwing_lair",
+      "display": "Blackwing Lair",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "103",
+          "position_x": "-7527.05",
+          "position_y": "-1226.77",
+          "position_z": "285.732",
+          "orientation": "5.29626",
+          "map": "0",
+          "name": "BlackrockSpire",
+          "outdoor": true
+        },
+        {
+          "id": "111",
+          "position_x": "164.789",
+          "position_y": "-475.305",
+          "position_z": "116.842",
+          "orientation": "0.022714",
+          "map": "229",
+          "name": "BlackwingLair",
+          "outdoor": false
+        }
+      ],
+      "short_aliases": [
+        "bwl"
+      ],
+      "instance_map": 469,
+      "available": true,
+      "entry_trigger": 3726,
+      "minimum_level": 60,
+      "note": "Blackrock Spire approach; follow the normal route or authorized shortcut to Blackwing Lair.",
+      "point": {
+        "x": -7527.05,
+        "y": -1226.77,
+        "z": 285.732,
+        "o": 5.29626,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 103,
+        "name": "BlackrockSpire"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "zulgurub",
+      "display": "Zul'Gurub",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1376",
+          "position_x": "-11916.7",
+          "position_y": "-1215.72",
+          "position_z": "92.289",
+          "orientation": "4.72454",
+          "map": "0",
+          "name": "ZulGurub",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "zg"
+      ],
+      "instance_map": 309,
+      "available": true,
+      "entry_trigger": 3928,
+      "minimum_level": 50,
+      "note": "",
+      "point": {
+        "x": -11916.7,
+        "y": -1215.72,
+        "z": 92.289,
+        "o": 4.72454,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1376,
+        "name": "ZulGurub"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "ruins_ahnqiraj",
+      "display": "Ruins of Ahn'Qiraj",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1130",
+          "position_x": "-8409.82",
+          "position_y": "1499.06",
+          "position_z": "27.7179",
+          "orientation": "2.51868",
+          "map": "1",
+          "name": "TheRuinsOfAhnQiraj",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "aq20"
+      ],
+      "instance_map": 509,
+      "available": true,
+      "entry_trigger": 4008,
+      "minimum_level": 50,
+      "note": "",
+      "point": {
+        "x": -8409.82,
+        "y": 1499.06,
+        "z": 27.7179,
+        "o": 2.51868,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1130,
+        "name": "TheRuinsOfAhnQiraj"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "temple_ahnqiraj",
+      "display": "Temple of Ahn'Qiraj",
+      "first": 0,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1174",
+          "position_x": "-8240.09",
+          "position_y": "1991.32",
+          "position_z": "129.072",
+          "orientation": "0.941603",
+          "map": "1",
+          "name": "TheTempleOfAhnQiraj",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "aq40"
+      ],
+      "instance_map": 531,
+      "available": true,
+      "entry_trigger": 4010,
+      "minimum_level": 50,
+      "note": "",
+      "point": {
+        "x": -8240.09,
+        "y": 1991.32,
+        "z": 129.072,
+        "o": 0.941603,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1174,
+        "name": "TheTempleOfAhnQiraj"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "naxxramas_40",
+      "display": "Naxxramas level 60 (Classic/TBC ONLY; never use its old location in WotLK)",
+      "first": 0,
+      "last": 1,
+      "valid_expansion": false,
+      "aliases_found": [
+        {
+          "id": "655",
+          "position_x": "3668.72",
+          "position_y": "-1262.46",
+          "position_z": "243.622",
+          "orientation": "4.785",
+          "map": "571",
+          "name": "Naxxramas",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "naxx40",
+        "naxx"
+      ],
+      "instance_map": 533,
+      "available": false,
+      "entry_trigger": 0,
+      "minimum_level": 0,
+      "note": "",
+      "reason": "wrong_expansion"
+    },
+    {
+      "key": "hellfire_ramparts",
+      "display": "Hellfire Ramparts",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "476",
+          "position_x": "-360.671",
+          "position_y": "3071.9",
+          "position_z": "-15.0977",
+          "orientation": "1.89389",
+          "map": "530",
+          "name": "HellfireRamparts",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "ramps"
+      ],
+      "instance_map": 543,
+      "available": true,
+      "entry_trigger": 4150,
+      "minimum_level": 55,
+      "note": "",
+      "point": {
+        "x": -360.671,
+        "y": 3071.9,
+        "z": -15.0977,
+        "o": 1.89389,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 476,
+        "name": "HellfireRamparts"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "blood_furnace",
+      "display": "The Blood Furnace",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1018",
+          "position_x": "-291.324",
+          "position_y": "3149.1",
+          "position_z": "31.5541",
+          "orientation": "2.27147",
+          "map": "530",
+          "name": "TheBloodFurnace",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "bf"
+      ],
+      "instance_map": 542,
+      "available": true,
+      "entry_trigger": 4152,
+      "minimum_level": 55,
+      "note": "",
+      "point": {
+        "x": -291.324,
+        "y": 3149.1,
+        "z": 31.5541,
+        "o": 2.27147,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1018,
+        "name": "TheBloodFurnace"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "shattered_halls",
+      "display": "The Shattered Halls",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1148",
+          "position_x": "-305.79",
+          "position_y": "3061.63",
+          "position_z": "-2.53847",
+          "orientation": "1.88888",
+          "map": "530",
+          "name": "TheShatteredHalls",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "shh"
+      ],
+      "instance_map": 540,
+      "available": true,
+      "entry_trigger": 4151,
+      "minimum_level": 55,
+      "note": "",
+      "point": {
+        "x": -305.79,
+        "y": 3061.63,
+        "z": -2.53847,
+        "o": 1.88888,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1148,
+        "name": "TheShatteredHalls"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "slave_pens",
+      "display": "The Slave Pens",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1156",
+          "position_x": "717.282",
+          "position_y": "6979.87",
+          "position_z": "-73.0281",
+          "orientation": "1.50287",
+          "map": "530",
+          "name": "TheSlavePens",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "sp"
+      ],
+      "instance_map": 547,
+      "available": true,
+      "entry_trigger": 4365,
+      "minimum_level": 55,
+      "note": "",
+      "point": {
+        "x": 717.282,
+        "y": 6979.87,
+        "z": -73.0281,
+        "o": 1.50287,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1156,
+        "name": "TheSlavePens"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "underbog",
+      "display": "The Underbog",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1180",
+          "position_x": "763.307",
+          "position_y": "6767.81",
+          "position_z": "-67.7695",
+          "orientation": "5.99726",
+          "map": "530",
+          "name": "TheUnderbog",
+          "outdoor": true
+        },
+        {
+          "id": "1262",
+          "position_x": "9.71391",
+          "position_y": "-16.2008",
+          "position_z": "-2.75334",
+          "orientation": "5.62187",
+          "map": "546",
+          "name": "underbog",
+          "outdoor": false
+        }
+      ],
+      "short_aliases": [
+        "ub"
+      ],
+      "instance_map": 546,
+      "available": true,
+      "entry_trigger": 4363,
+      "minimum_level": 55,
+      "note": "",
+      "point": {
+        "x": 763.307,
+        "y": 6767.81,
+        "z": -67.7695,
+        "o": 5.99726,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1180,
+        "name": "TheUnderbog"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "steamvault",
+      "display": "The Steamvault",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1163",
+          "position_x": "794.537",
+          "position_y": "6927.81",
+          "position_z": "-80.4757",
+          "orientation": "0.159089",
+          "map": "530",
+          "name": "TheSteamvault",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "sv"
+      ],
+      "instance_map": 545,
+      "available": true,
+      "entry_trigger": 4364,
+      "minimum_level": 55,
+      "note": "",
+      "point": {
+        "x": 794.537,
+        "y": 6927.81,
+        "z": -80.4757,
+        "o": 0.159089,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1163,
+        "name": "TheSteamvault"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "mana_tombs",
+      "display": "Mana-Tombs",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "597",
+          "position_x": "-3104.18",
+          "position_y": "4945.52",
+          "position_z": "-101.507",
+          "orientation": "6.22344",
+          "map": "530",
+          "name": "ManaTombs",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "mt"
+      ],
+      "instance_map": 557,
+      "available": true,
+      "entry_trigger": 4405,
+      "minimum_level": 55,
+      "note": "",
+      "point": {
+        "x": -3104.18,
+        "y": 4945.52,
+        "z": -101.507,
+        "o": 6.22344,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 597,
+        "name": "ManaTombs"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "auchenai_crypts",
+      "display": "Auchenai Crypts",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "61",
+          "position_x": "-3362.04",
+          "position_y": "5209.85",
+          "position_z": "-101.05",
+          "orientation": "1.60924",
+          "map": "530",
+          "name": "AuchenaiCrypts",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "ac"
+      ],
+      "instance_map": 558,
+      "available": true,
+      "entry_trigger": 4404,
+      "minimum_level": 55,
+      "note": "",
+      "point": {
+        "x": -3362.04,
+        "y": 5209.85,
+        "z": -101.05,
+        "o": 1.60924,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 61,
+        "name": "AuchenaiCrypts"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "sethekk_halls",
+      "display": "Sethekk Halls",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "831",
+          "position_x": "-3362.2",
+          "position_y": "4664.12",
+          "position_z": "-101.049",
+          "orientation": "4.6605",
+          "map": "530",
+          "name": "SethekkHalls",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "sethekk"
+      ],
+      "instance_map": 556,
+      "available": true,
+      "entry_trigger": 4406,
+      "minimum_level": 55,
+      "note": "",
+      "point": {
+        "x": -3362.2,
+        "y": 4664.12,
+        "z": -101.049,
+        "o": 4.6605,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 831,
+        "name": "SethekkHalls"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "shadow_labyrinth",
+      "display": "Shadow Labyrinth",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "840",
+          "position_x": "-3627.9",
+          "position_y": "4941.98",
+          "position_z": "-101.049",
+          "orientation": "3.16039",
+          "map": "530",
+          "name": "ShadowLabyrinth",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "sl"
+      ],
+      "instance_map": 555,
+      "available": true,
+      "entry_trigger": 4407,
+      "minimum_level": 65,
+      "note": "",
+      "point": {
+        "x": -3627.9,
+        "y": 4941.98,
+        "z": -101.049,
+        "o": 3.16039,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 840,
+        "name": "ShadowLabyrinth"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "old_hillsbrad",
+      "display": "Old Hillsbrad Foothills",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "695",
+          "position_x": "-8404.3",
+          "position_y": "-4070.62",
+          "position_z": "-208.586",
+          "orientation": "0.237038",
+          "map": "1",
+          "name": "OldHillsbradFoothills",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "ohb"
+      ],
+      "instance_map": 560,
+      "available": true,
+      "entry_trigger": 4321,
+      "minimum_level": 66,
+      "note": "",
+      "point": {
+        "x": -8404.3,
+        "y": -4070.62,
+        "z": -208.586,
+        "o": 0.237038,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 695,
+        "name": "OldHillsbradFoothills"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "black_morass",
+      "display": "The Black Morass",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1016",
+          "position_x": "-8734.3",
+          "position_y": "-4230.11",
+          "position_z": "-209.5",
+          "orientation": "2.16212",
+          "map": "1",
+          "name": "TheBlackMorass",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "bm"
+      ],
+      "instance_map": 269,
+      "available": true,
+      "entry_trigger": 4320,
+      "minimum_level": 66,
+      "note": "",
+      "point": {
+        "x": -8734.3,
+        "y": -4230.11,
+        "z": -209.5,
+        "o": 2.16212,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1016,
+        "name": "TheBlackMorass"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "mechanar",
+      "display": "The Mechanar",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1101",
+          "position_x": "2867.12",
+          "position_y": "1549.42",
+          "position_z": "252.159",
+          "orientation": "3.82218",
+          "map": "530",
+          "name": "TheMechanar",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "mech"
+      ],
+      "instance_map": 554,
+      "available": true,
+      "entry_trigger": 4469,
+      "minimum_level": 68,
+      "note": "",
+      "point": {
+        "x": 2867.12,
+        "y": 1549.42,
+        "z": 252.159,
+        "o": 3.82218,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1101,
+        "name": "TheMechanar"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "botanica",
+      "display": "The Botanica",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1020",
+          "position_x": "3407.11",
+          "position_y": "1488.48",
+          "position_z": "182.838",
+          "orientation": "5.59559",
+          "map": "530",
+          "name": "TheBotanica",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "bot"
+      ],
+      "instance_map": 553,
+      "available": true,
+      "entry_trigger": 4467,
+      "minimum_level": 68,
+      "note": "",
+      "point": {
+        "x": 3407.11,
+        "y": 1488.48,
+        "z": 182.838,
+        "o": 5.59559,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1020,
+        "name": "TheBotanica"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "arcatraz",
+      "display": "The Arcatraz",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1012",
+          "position_x": "3308.92",
+          "position_y": "1340.72",
+          "position_z": "505.56",
+          "orientation": "4.94686",
+          "map": "530",
+          "name": "TheArcatraz",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "arc"
+      ],
+      "instance_map": 552,
+      "available": true,
+      "entry_trigger": 4468,
+      "minimum_level": 68,
+      "note": "",
+      "point": {
+        "x": 3308.92,
+        "y": 1340.72,
+        "z": 505.56,
+        "o": 4.94686,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1012,
+        "name": "TheArcatraz"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "magisters_terrace",
+      "display": "Magisters' Terrace",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "585",
+          "position_x": "12884.6",
+          "position_y": "-7317.69",
+          "position_z": "65.5023",
+          "orientation": "4.799",
+          "map": "530",
+          "name": "MagistersTerrace",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "mgt"
+      ],
+      "instance_map": 585,
+      "available": true,
+      "entry_trigger": 4887,
+      "minimum_level": 70,
+      "note": "",
+      "point": {
+        "x": 12884.6,
+        "y": -7317.69,
+        "z": 65.5023,
+        "o": 4.799,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 585,
+        "name": "MagistersTerrace"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "karazhan",
+      "display": "Karazhan",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "531",
+          "position_x": "-11118.9",
+          "position_y": "-2010.33",
+          "position_z": "47.0819",
+          "orientation": "0.649895",
+          "map": "0",
+          "name": "Karazhan",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "kara"
+      ],
+      "instance_map": 532,
+      "available": true,
+      "entry_trigger": 4131,
+      "minimum_level": 70,
+      "note": "",
+      "point": {
+        "x": -11118.9,
+        "y": -2010.33,
+        "z": 47.0819,
+        "o": 0.649895,
+        "map": 0
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 531,
+        "name": "Karazhan"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "gruuls_lair",
+      "display": "Gruul's Lair",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "457",
+          "position_x": "3530.06",
+          "position_y": "5104.08",
+          "position_z": "3.50861",
+          "orientation": "5.51117",
+          "map": "530",
+          "name": "GruulsLair",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "gruul"
+      ],
+      "instance_map": 565,
+      "available": true,
+      "entry_trigger": 4535,
+      "minimum_level": 65,
+      "note": "",
+      "point": {
+        "x": 3530.06,
+        "y": 5104.08,
+        "z": 3.50861,
+        "o": 5.51117,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 457,
+        "name": "GruulsLair"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "magtheridons_lair",
+      "display": "Magtheridon's Lair",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "589",
+          "position_x": "-312.7",
+          "position_y": "3087.26",
+          "position_z": "-116.52",
+          "orientation": "5.19026",
+          "map": "530",
+          "name": "MagtheridonsLair",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "mag"
+      ],
+      "instance_map": 544,
+      "available": true,
+      "entry_trigger": 4153,
+      "minimum_level": 65,
+      "note": "",
+      "point": {
+        "x": -312.7,
+        "y": 3087.26,
+        "z": -116.52,
+        "o": 5.19026,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 589,
+        "name": "MagtheridonsLair"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "serpentshrine_cavern",
+      "display": "Serpentshrine Cavern",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "829",
+          "position_x": "820.025",
+          "position_y": "6864.93",
+          "position_z": "-66.7556",
+          "orientation": "6.28127",
+          "map": "530",
+          "name": "SerpentshrineCavern",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "ssc"
+      ],
+      "instance_map": 548,
+      "available": true,
+      "entry_trigger": 4416,
+      "minimum_level": 70,
+      "note": "",
+      "point": {
+        "x": 820.025,
+        "y": 6864.93,
+        "z": -66.7556,
+        "o": 6.28127,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 829,
+        "name": "SerpentshrineCavern"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "tempest_keep",
+      "display": "Tempest Keep: The Eye",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "350",
+          "position_x": "-10.8021",
+          "position_y": "-1.15045",
+          "position_z": "-2.42833",
+          "orientation": "6.22821",
+          "map": "550",
+          "name": "Eye",
+          "outdoor": false
+        },
+        {
+          "id": "351",
+          "position_x": "2167.44",
+          "position_y": "1564.11",
+          "position_z": "1159.35",
+          "orientation": "0.254382",
+          "map": "566",
+          "name": "EyeOfTheStorm",
+          "outdoor": false
+        },
+        {
+          "id": "352",
+          "position_x": "2487.72",
+          "position_y": "1609.12",
+          "position_z": "1224.64",
+          "orientation": "3.35671",
+          "map": "566",
+          "name": "EyeOfTheStormAlliance",
+          "outdoor": false
+        },
+        {
+          "id": "353",
+          "position_x": "1843.73",
+          "position_y": "1529.77",
+          "position_z": "1224.43",
+          "orientation": "0.297579",
+          "map": "566",
+          "name": "EyeOfTheStormHorde",
+          "outdoor": false
+        },
+        {
+          "id": "989",
+          "position_x": "3099.36",
+          "position_y": "1518.73",
+          "position_z": "190.3",
+          "orientation": "4.72592",
+          "map": "530",
+          "name": "TempestKeep",
+          "outdoor": true
+        },
+        {
+          "id": "1056",
+          "position_x": "3088.49",
+          "position_y": "1381.57",
+          "position_z": "184.863",
+          "orientation": "4.61973",
+          "map": "530",
+          "name": "TheEye",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "tk"
+      ],
+      "instance_map": 550,
+      "available": true,
+      "entry_trigger": 4470,
+      "minimum_level": 68,
+      "note": "",
+      "point": {
+        "x": 3088.49,
+        "y": 1381.57,
+        "z": 184.863,
+        "o": 4.61973,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1056,
+        "name": "TheEye"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "hyjal_summit",
+      "display": "The Battle for Mount Hyjal",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "196",
+          "position_x": "-8204.88",
+          "position_y": "-4495.25",
+          "position_z": "9.0091",
+          "orientation": "4.72574",
+          "map": "1",
+          "name": "CavernsOfTime",
+          "outdoor": true
+        },
+        {
+          "id": "495",
+          "position_x": "-8177.89",
+          "position_y": "-4181.23",
+          "position_z": "-167.552",
+          "orientation": "0.913338",
+          "map": "1",
+          "name": "HyjalSummit",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "hyjal"
+      ],
+      "instance_map": 534,
+      "available": true,
+      "entry_trigger": 4319,
+      "minimum_level": 70,
+      "note": "",
+      "point": {
+        "x": -8177.89,
+        "y": -4181.23,
+        "z": -167.552,
+        "o": 0.913338,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 495,
+        "name": "HyjalSummit"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "black_temple",
+      "display": "Black Temple",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "106",
+          "position_x": "-3649.92",
+          "position_y": "317.469",
+          "position_z": "35.2827",
+          "orientation": "2.94285",
+          "map": "530",
+          "name": "BlackTemple",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "bt"
+      ],
+      "instance_map": 564,
+      "available": true,
+      "entry_trigger": 4598,
+      "minimum_level": 70,
+      "note": "",
+      "point": {
+        "x": -3649.92,
+        "y": 317.469,
+        "z": 35.2827,
+        "o": 2.94285,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 106,
+        "name": "BlackTemple"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "zulaman",
+      "display": "Zul'Aman",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1374",
+          "position_x": "6851.78",
+          "position_y": "-7972.57",
+          "position_z": "179.242",
+          "orientation": "4.64691",
+          "map": "530",
+          "name": "ZulAman",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "za"
+      ],
+      "instance_map": 568,
+      "available": true,
+      "entry_trigger": 4738,
+      "minimum_level": 68,
+      "note": "",
+      "point": {
+        "x": 6851.78,
+        "y": -7972.57,
+        "z": 179.242,
+        "o": 4.64691,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1374,
+        "name": "ZulAman"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "sunwell_plateau",
+      "display": "Sunwell Plateau",
+      "first": 1,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "970",
+          "position_x": "12574.1",
+          "position_y": "-6774.81",
+          "position_z": "15.0904",
+          "orientation": "3.13788",
+          "map": "530",
+          "name": "SunwellPlateau",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "swp"
+      ],
+      "instance_map": 580,
+      "available": true,
+      "entry_trigger": 4889,
+      "minimum_level": 70,
+      "note": "",
+      "point": {
+        "x": 12574.1,
+        "y": -6774.81,
+        "z": 15.0904,
+        "o": 3.13788,
+        "map": 530
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 970,
+        "name": "SunwellPlateau"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "utgarde_keep",
+      "display": "Utgarde Keep",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1389",
+          "position_x": "1219.72",
+          "position_y": "-4865.28",
+          "position_z": "41.2479",
+          "orientation": "0.313228",
+          "map": "571",
+          "name": "UtgardeKeep",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "uk"
+      ],
+      "instance_map": 574,
+      "available": true,
+      "entry_trigger": 4745,
+      "minimum_level": 68,
+      "note": "",
+      "point": {
+        "x": 1219.72,
+        "y": -4865.28,
+        "z": 41.2479,
+        "o": 0.313228,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1389,
+        "name": "UtgardeKeep"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "nexus",
+      "display": "The Nexus",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1393",
+          "position_x": "3781.81",
+          "position_y": "6953.65",
+          "position_z": "104.82",
+          "orientation": "0.467432",
+          "map": "571",
+          "name": "TheNexus",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "nexus"
+      ],
+      "instance_map": 576,
+      "available": true,
+      "entry_trigger": 4983,
+      "minimum_level": 68,
+      "note": "",
+      "point": {
+        "x": 3781.81,
+        "y": 6953.65,
+        "z": 104.82,
+        "o": 0.467432,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1393,
+        "name": "TheNexus"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "azjol_nerub",
+      "display": "Azjol-Nerub",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "455",
+          "position_x": "3707.86",
+          "position_y": "2150.23",
+          "position_z": "36.76",
+          "orientation": "3.22",
+          "map": "571",
+          "name": "AzjolNerub",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "an"
+      ],
+      "instance_map": 601,
+      "available": true,
+      "entry_trigger": 5117,
+      "minimum_level": 67,
+      "note": "",
+      "point": {
+        "x": 3707.86,
+        "y": 2150.23,
+        "z": 36.76,
+        "o": 3.22,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 455,
+        "name": "AzjolNerub"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "ahnkahet",
+      "display": "Ahn'kahet: The Old Kingdom",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [],
+      "short_aliases": [
+        "ok"
+      ],
+      "instance_map": 619,
+      "available": true,
+      "entry_trigger": 5215,
+      "minimum_level": 68,
+      "note": "",
+      "point": {
+        "x": 333.351,
+        "y": -1109.94,
+        "z": 69.772,
+        "o": 0.553,
+        "map": 619
+      },
+      "source": {
+        "table": "areatrigger_teleport",
+        "id": 5215,
+        "name": "Ahn'Kahet (entrance)"
+      },
+      "inside": true,
+      "reason": "ok"
+    },
+    {
+      "key": "draktharon_keep",
+      "display": "Drak'Tharon Keep",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1411",
+          "position_x": "4774.6",
+          "position_y": "-2032.92",
+          "position_z": "229.15",
+          "orientation": "1.59",
+          "map": "571",
+          "name": "DrakTharonKeep",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "dtk"
+      ],
+      "instance_map": 600,
+      "available": true,
+      "entry_trigger": 4998,
+      "minimum_level": 69,
+      "note": "",
+      "point": {
+        "x": 4774.6,
+        "y": -2032.92,
+        "z": 229.15,
+        "o": 1.59,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1411,
+        "name": "DrakTharonKeep"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "violet_hold",
+      "display": "The Violet Hold",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1415",
+          "position_x": "5696.73",
+          "position_y": "507.4",
+          "position_z": "652.97",
+          "orientation": "4.03",
+          "map": "571",
+          "name": "TheVioletHold",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "vh"
+      ],
+      "instance_map": 608,
+      "available": true,
+      "entry_trigger": 5209,
+      "minimum_level": 70,
+      "note": "",
+      "point": {
+        "x": 5696.73,
+        "y": 507.4,
+        "z": 652.97,
+        "o": 4.03,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1415,
+        "name": "TheVioletHold"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "gundrak",
+      "display": "Gundrak",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1404",
+          "position_x": "6898.72",
+          "position_y": "-4584.94",
+          "position_z": "451.12",
+          "orientation": "2.34455",
+          "map": "571",
+          "name": "Gundrak",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "gd"
+      ],
+      "instance_map": 604,
+      "available": true,
+      "entry_trigger": 5205,
+      "minimum_level": 71,
+      "note": "",
+      "point": {
+        "x": 6898.72,
+        "y": -4584.94,
+        "z": 451.12,
+        "o": 2.34455,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1404,
+        "name": "Gundrak"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "halls_of_stone",
+      "display": "Halls of Stone",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [],
+      "short_aliases": [
+        "hos"
+      ],
+      "instance_map": 599,
+      "available": true,
+      "entry_trigger": 5010,
+      "minimum_level": 72,
+      "note": "",
+      "point": {
+        "x": 1153.24,
+        "y": 806.164,
+        "z": 195.937,
+        "o": 4.715,
+        "map": 599
+      },
+      "source": {
+        "table": "areatrigger_teleport",
+        "id": 5010,
+        "name": "Ulduar, Halls of Stone (entrance)"
+      },
+      "inside": true,
+      "reason": "ok"
+    },
+    {
+      "key": "halls_of_lightning",
+      "display": "Halls of Lightning",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [],
+      "short_aliases": [
+        "hol"
+      ],
+      "instance_map": 602,
+      "available": true,
+      "entry_trigger": 5093,
+      "minimum_level": 75,
+      "note": "",
+      "point": {
+        "x": 1331.47,
+        "y": 259.619,
+        "z": 53.398,
+        "o": 4.772,
+        "map": 602
+      },
+      "source": {
+        "table": "areatrigger_teleport",
+        "id": 5093,
+        "name": "Ulduar, Halls of Lightning (entrance)"
+      },
+      "inside": true,
+      "reason": "ok"
+    },
+    {
+      "key": "oculus",
+      "display": "The Oculus",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [],
+      "short_aliases": [
+        "occ"
+      ],
+      "instance_map": 578,
+      "available": true,
+      "entry_trigger": 5246,
+      "minimum_level": 75,
+      "note": "",
+      "point": {
+        "x": 1055.93,
+        "y": 986.85,
+        "z": 361.07,
+        "o": 5.745,
+        "map": 578
+      },
+      "source": {
+        "table": "areatrigger_teleport",
+        "id": 5246,
+        "name": "The Oculus (entrance)"
+      },
+      "inside": true,
+      "reason": "ok"
+    },
+    {
+      "key": "utgarde_pinnacle",
+      "display": "Utgarde Pinnacle",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1388",
+          "position_x": "1259.33",
+          "position_y": "-4852.02",
+          "position_z": "215.763",
+          "orientation": "3.48293",
+          "map": "571",
+          "name": "UtgardePinnacle",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "up"
+      ],
+      "instance_map": 575,
+      "available": true,
+      "entry_trigger": 4747,
+      "minimum_level": 75,
+      "note": "",
+      "point": {
+        "x": 1259.33,
+        "y": -4852.02,
+        "z": 215.763,
+        "o": 3.48293,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1388,
+        "name": "UtgardePinnacle"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "culling_stratholme",
+      "display": "The Culling of Stratholme",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1425",
+          "position_x": "-8755.84",
+          "position_y": "-4454.57",
+          "position_z": "-200.169",
+          "orientation": "4.37",
+          "map": "1",
+          "name": "CullingOfStratholme",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "cos"
+      ],
+      "instance_map": 595,
+      "available": true,
+      "entry_trigger": 5150,
+      "minimum_level": 75,
+      "note": "",
+      "point": {
+        "x": -8755.84,
+        "y": -4454.57,
+        "z": -200.169,
+        "o": 4.37,
+        "map": 1
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1425,
+        "name": "CullingOfStratholme"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "trial_champion",
+      "display": "Trial of the Champion",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1421",
+          "position_x": "8588.42",
+          "position_y": "791.888",
+          "position_z": "558.236",
+          "orientation": "3.23819",
+          "map": "571",
+          "name": "TrialOfTheChampion",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "toc5"
+      ],
+      "instance_map": 650,
+      "available": true,
+      "entry_trigger": 5505,
+      "minimum_level": 80,
+      "note": "",
+      "point": {
+        "x": 8588.42,
+        "y": 791.888,
+        "z": 558.236,
+        "o": 3.23819,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1421,
+        "name": "TrialOfTheChampion"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "forge_of_souls",
+      "display": "The Forge of Souls",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [],
+      "short_aliases": [
+        "fos"
+      ],
+      "instance_map": 632,
+      "available": true,
+      "entry_trigger": 5635,
+      "minimum_level": 75,
+      "note": "",
+      "point": {
+        "x": 4923.11,
+        "y": 2175.02,
+        "z": 638.734,
+        "o": 2.00109,
+        "map": 632
+      },
+      "source": {
+        "table": "areatrigger_teleport",
+        "id": 5635,
+        "name": "ICC The Forge of Souls, entrance"
+      },
+      "inside": true,
+      "reason": "ok"
+    },
+    {
+      "key": "pit_of_saron",
+      "display": "Pit of Saron",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [],
+      "short_aliases": [
+        "pos"
+      ],
+      "instance_map": 658,
+      "available": true,
+      "entry_trigger": 5637,
+      "minimum_level": 75,
+      "note": "",
+      "point": {
+        "x": 435.743,
+        "y": 212.413,
+        "z": 528.709,
+        "o": 6.25646,
+        "map": 658
+      },
+      "source": {
+        "table": "areatrigger_teleport",
+        "id": 5637,
+        "name": "ICC Pit of Saron (entrance)"
+      },
+      "inside": true,
+      "reason": "ok"
+    },
+    {
+      "key": "halls_of_reflection",
+      "display": "Halls of Reflection",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [],
+      "short_aliases": [
+        "hor"
+      ],
+      "instance_map": 668,
+      "available": true,
+      "entry_trigger": 5636,
+      "minimum_level": 75,
+      "note": "",
+      "point": {
+        "x": 5239.01,
+        "y": 1932.64,
+        "z": 707.695,
+        "o": 0.800565,
+        "map": 668
+      },
+      "source": {
+        "table": "areatrigger_teleport",
+        "id": 5636,
+        "name": "ICC Halls of Reflection (entrance)"
+      },
+      "inside": true,
+      "reason": "ok"
+    },
+    {
+      "key": "naxxramas",
+      "display": "Naxxramas level 80",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "655",
+          "position_x": "3668.72",
+          "position_y": "-1262.46",
+          "position_z": "243.622",
+          "orientation": "4.785",
+          "map": "571",
+          "name": "Naxxramas",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "naxx",
+        "naxx80"
+      ],
+      "instance_map": 533,
+      "available": true,
+      "entry_trigger": 5191,
+      "minimum_level": 80,
+      "note": "",
+      "point": {
+        "x": 3668.72,
+        "y": -1262.46,
+        "z": 243.622,
+        "o": 4.785,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 655,
+        "name": "Naxxramas"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "obsidian_sanctum",
+      "display": "The Obsidian Sanctum",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1414",
+          "position_x": "3516.96",
+          "position_y": "270.17",
+          "position_z": "-114.04",
+          "orientation": "3.24",
+          "map": "571",
+          "name": "TheObsidianSanctum",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "os"
+      ],
+      "instance_map": 615,
+      "available": true,
+      "entry_trigger": 5243,
+      "minimum_level": 80,
+      "note": "",
+      "point": {
+        "x": 3516.96,
+        "y": 270.17,
+        "z": -114.04,
+        "o": 3.24,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1414,
+        "name": "TheObsidianSanctum"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "eye_of_eternity",
+      "display": "The Eye of Eternity",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [],
+      "short_aliases": [
+        "eoe"
+      ],
+      "instance_map": 616,
+      "available": true,
+      "entry_trigger": 5290,
+      "minimum_level": 80,
+      "note": "Shared Nexus approach; follow the normal route to the Eye of Eternity.",
+      "point": {
+        "x": 3781.81,
+        "y": 6953.65,
+        "z": 104.82,
+        "o": 0.467432,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1393,
+        "name": "TheNexus"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "vault_archavon",
+      "display": "Vault of Archavon",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1410",
+          "position_x": "5453.72",
+          "position_y": "2840.79",
+          "position_z": "421.28",
+          "orientation": "0",
+          "map": "571",
+          "name": "VaultOfArchavon",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "voa"
+      ],
+      "instance_map": 624,
+      "available": true,
+      "entry_trigger": 5258,
+      "minimum_level": 80,
+      "note": "Requires Wintergrasp ownership and no active battle.",
+      "point": {
+        "x": 5453.72,
+        "y": 2840.79,
+        "z": 421.28,
+        "o": 0.0,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1410,
+        "name": "VaultOfArchavon"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "ulduar",
+      "display": "Ulduar",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1406",
+          "position_x": "9049.37",
+          "position_y": "-1282.35",
+          "position_z": "1060.19",
+          "orientation": "5.8395",
+          "map": "571",
+          "name": "Ulduar",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "ulduar"
+      ],
+      "instance_map": 603,
+      "available": true,
+      "entry_trigger": 5379,
+      "minimum_level": 80,
+      "note": "",
+      "point": {
+        "x": 9049.37,
+        "y": -1282.35,
+        "z": 1060.19,
+        "o": 5.8395,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1406,
+        "name": "Ulduar"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "trial_crusader",
+      "display": "Trial of the Crusader",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1420",
+          "position_x": "8515.63",
+          "position_y": "714.174",
+          "position_z": "558.248",
+          "orientation": "1.57298",
+          "map": "571",
+          "name": "TrialOfTheCrusader",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "toc"
+      ],
+      "instance_map": 649,
+      "available": true,
+      "entry_trigger": 5503,
+      "minimum_level": 80,
+      "note": "",
+      "point": {
+        "x": 8515.63,
+        "y": 714.174,
+        "z": 558.248,
+        "o": 1.57298,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1420,
+        "name": "TrialOfTheCrusader"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "icecrown_citadel",
+      "display": "Icecrown Citadel",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1419",
+          "position_x": "5872.16",
+          "position_y": "2108.36",
+          "position_z": "636.042",
+          "orientation": "3.27275",
+          "map": "571",
+          "name": "IcecrownCitadel",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "icc"
+      ],
+      "instance_map": 631,
+      "available": true,
+      "entry_trigger": 5670,
+      "minimum_level": 80,
+      "note": "",
+      "point": {
+        "x": 5872.16,
+        "y": 2108.36,
+        "z": 636.042,
+        "o": 3.27275,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1419,
+        "name": "IcecrownCitadel"
+      },
+      "inside": false,
+      "reason": "ok"
+    },
+    {
+      "key": "ruby_sanctum",
+      "display": "The Ruby Sanctum",
+      "first": 2,
+      "last": 2,
+      "valid_expansion": true,
+      "aliases_found": [
+        {
+          "id": "1416",
+          "position_x": "3604.33",
+          "position_y": "192.201",
+          "position_z": "-110.843",
+          "orientation": "5.34857",
+          "map": "571",
+          "name": "RubySanctum",
+          "outdoor": true
+        },
+        {
+          "id": "1417",
+          "position_x": "3604.33",
+          "position_y": "192.201",
+          "position_z": "-110.843",
+          "orientation": "5.34857",
+          "map": "571",
+          "name": "TheRubySanctum",
+          "outdoor": true
+        }
+      ],
+      "short_aliases": [
+        "rs"
+      ],
+      "instance_map": 724,
+      "available": true,
+      "entry_trigger": 5869,
+      "minimum_level": 80,
+      "note": "",
+      "point": {
+        "x": 3604.33,
+        "y": 192.201,
+        "z": -110.843,
+        "o": 5.34857,
+        "map": 571
+      },
+      "source": {
+        "table": "game_tele",
+        "id": 1416,
+        "name": "RubySanctum"
+      },
+      "inside": false,
+      "reason": "ok"
+    }
+  ]
+}
