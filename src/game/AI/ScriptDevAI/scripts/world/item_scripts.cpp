@@ -582,6 +582,21 @@ struct ShattrathFlasks : public AuraScript
 
 namespace
 {
+    struct ManTechPortableRepairSpell : public SpellScript
+    {
+        void OnSummon(Spell* spell, Creature* summon) const override
+        {
+            Item* item = spell->GetCastItem();
+            WorldObject* caster = spell->GetTrueCaster();
+            if (!item || item->GetEntry() != 65001 || !caster ||
+                caster->GetTypeId() != TYPEID_PLAYER || !summon || summon->GetEntry() != 24780)
+                return;
+
+            Player* player = static_cast<Player*>(caster);
+            summon->SetFactionTemporary(player->GetTeam() == ALLIANCE ? 12 : 29, TEMPFACTION_NONE);
+        }
+    };
+
     struct ManTechPortableAuctioneerSpell : public SpellScript
     {
         SpellCastResult OnCheckCast(Spell* spell, bool /*strict*/) const override
@@ -620,6 +635,7 @@ namespace
 
 void AddSC_item_scripts()
 {
+    RegisterSpellScript<ManTechPortableRepairSpell>("spell_mantech_portable_repair");
     RegisterSpellScript<ManTechPortableAuctioneerSpell>("spell_mantech_portable_auctioneer");
     Script* pNewScript = new Script;
     pNewScript->Name = "item_orb_of_draconic_energy";
