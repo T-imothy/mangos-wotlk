@@ -1468,9 +1468,12 @@ CreaturePickpocketRestockDelay = 600
 #                 3 (characters limited by RealmZone language in global and all custom channels)
 #
 #    Channel.RestrictedLfg
-#        Restrict use LookupForGroup channel only registered in LFG tool players
-#        Default: 1 (allow join to channel only if active in LFG)
-#                 0 (allow join to channel in any time)
+#        Restrict access to the LookingForGroup chat channel.
+#        Keep disabled for 3.3.5: its FrameXML no longer defines the
+#        CHAT_NOT_IN_LFG_NOTICE text sent by the restricted join path.
+#        This setting does not control dungeon-finder queues or bot participation.
+#        Default: 0 (allow joining the chat channel at any time)
+#                 1 (legacy restriction; incompatible with the stock 3.3.5 UI)
 #
 #    Channel.StaticAutoTreshold
 #        Static custom channels are custom channels pre-configured with global-like properties in a "world chat" manner.
@@ -1488,7 +1491,7 @@ ChatFlood.MessageDelay = 1
 ChatFlood.MuteTime = 10
 Chat.RestrictedRaidWarnings = 1
 Channel.RestrictedLanguageMode = 0
-Channel.RestrictedLfg = 1
+Channel.RestrictedLfg = 0
 Channel.StaticAutoTreshold = 0
 
 ###################################################################################################################
