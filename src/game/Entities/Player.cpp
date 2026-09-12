@@ -16,6 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include "Mails/ManTechPortableUtilityGrant.h"
 #include "Entities/PortableRepairVendor.h"
 #include "Entities/Player.h"
 #include "Tools/Language.h"
@@ -3186,6 +3187,9 @@ void Player::GiveLevel(uint32 level)
     // resend quests status directly
     GetSession()->SetCurrentPlayerLevel(level);
     SendQuestGiverStatusMultiple();
+    // Login/startup also retries this one-time gift, including copied characters.
+    if (IsInWorld() && level >= 40)
+        ManTechPortableUtilityGrant::GrantLevelRewardToCharacter(GetObjectGuid(), this);
 }
 
 void Player::UpdateFreeTalentPoints(bool resetIfNeed)
@@ -21569,6 +21573,7 @@ void Player::SendInitialPacketsBeforeAddToMap()
     data << uint32(GetMap()->GetEntry()->IsDynamicDifficultyMap() && GetMap()->IsHeroic()); // Raid dynamic difficulty
     GetSession()->SendPacket(data);
 
+    GetSession()->SendItemQuerySingleResponse(18246); // Refresh the cross-faction level-40 reward requirements.
     SendInitialSpells();
 
     SendUnlearnSpells();

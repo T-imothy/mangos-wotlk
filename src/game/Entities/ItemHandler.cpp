@@ -296,6 +296,11 @@ void WorldSession::HandleItemQuerySingleOpcode(WorldPacket& recv_data)
 
     DETAIL_LOG("STORAGE: Item Query = %u", item);
 
+    SendItemQuerySingleResponse(item);
+}
+
+void WorldSession::SendItemQuerySingleResponse(uint32 item)
+{
     ItemPrototype const* pProto = ObjectMgr::GetItemPrototype(item);
     if (pProto)
     {

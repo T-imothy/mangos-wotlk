@@ -5415,6 +5415,15 @@ void Aura::HandleAuraModIncreaseMountedSpeed(bool apply, bool Real)
 
     Unit* target = GetTarget();
 
+    // The ManTech level-40 reward scales only this mount's base speed.
+    // Native riding bonuses and slows still apply through UpdateSpeed.
+    if (apply && GetId() == 22721 && m_modifier.m_auraname == SPELL_AURA_MOD_INCREASE_MOUNTED_SPEED &&
+        GetTarget()->GetTypeId() == TYPEID_PLAYER)
+    {
+        Player* rider = static_cast<Player*>(GetTarget());
+        m_modifier.m_amount = rider->GetLevel() >= 60 && rider->GetSkillValuePure(SKILL_RIDING) >= 150 ? 100 : 60;
+    }
+
     target->UpdateSpeed(MOVE_RUN, true);
 
     // Festive Holiday Mount
