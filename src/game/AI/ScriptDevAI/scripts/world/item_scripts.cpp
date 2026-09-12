@@ -28,6 +28,7 @@ item_gor_dreks_ointment(i30175)     Protecting Our Own(q10488)
 EndContentData */
 
 #include "AI/ScriptDevAI/include/sc_common.h"
+#include "Entities/PortableRepairVendor.h"
 #include "Spells/Spell.h"
 #include "Spells/Scripts/SpellScript.h"
 #include "Spells/SpellAuras.h"
@@ -588,10 +589,12 @@ namespace
         {
             Item* item = spell->GetCastItem();
             WorldObject* caster = spell->GetTrueCaster();
-            if (!item || item->GetEntry() != 65001 || !caster ||
-                caster->GetTypeId() != TYPEID_PLAYER || !summon || summon->GetEntry() != 24780)
+            if (!item || item->GetEntry() != PortableRepairVendor::HAMMER_ITEM || !caster ||
+                caster->GetTypeId() != TYPEID_PLAYER || !summon || summon->GetEntry() != PortableRepairVendor::CREATURE_ENTRY)
                 return;
 
+            // ResolveSummonEntry has already replaced the native engineering
+            // creature with our dedicated vendor before OnSummon runs.
             Player* player = static_cast<Player*>(caster);
             summon->SetFactionTemporary(player->GetTeam() == ALLIANCE ? 12 : 29, TEMPFACTION_NONE);
         }
