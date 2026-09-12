@@ -21573,7 +21573,7 @@ void Player::SendInitialPacketsBeforeAddToMap()
     data << uint32(GetMap()->GetEntry()->IsDynamicDifficultyMap() && GetMap()->IsHeroic()); // Raid dynamic difficulty
     GetSession()->SendPacket(data);
 
-    GetSession()->SendItemQuerySingleResponse(18246); // Refresh the cross-faction level-40 reward requirements.
+    GetSession()->SendItemQuerySingleResponse(65003); // Refresh the cross-faction level-40 reward requirements.
     SendInitialSpells();
 
     SendUnlearnSpells();
