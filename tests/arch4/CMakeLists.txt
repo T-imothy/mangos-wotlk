@@ -33,3 +33,15 @@ add_test(NAME arch4_map_lifetime COMMAND arch4_map_lifetime_tests)
 set_tests_properties(arch4_map_lifetime PROPERTIES
   WORKING_DIRECTORY "$<TARGET_FILE_DIR:mangosd>"
   TIMEOUT 60)
+
+add_executable(arch4_shuffle_tests shuffle_tests.cpp)
+target_compile_features(arch4_shuffle_tests PRIVATE cxx_std_20)
+target_include_directories(arch4_shuffle_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/shared)
+target_link_libraries(arch4_shuffle_tests PRIVATE cmangos-compile-option-interface)
+add_test(NAME arch4_shuffle COMMAND arch4_shuffle_tests)
+
+add_executable(arch4_account_tests account_membership_tests.cpp)
+target_compile_features(arch4_account_tests PRIVATE cxx_std_20)
+target_include_directories(arch4_account_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/shared)
+target_link_libraries(arch4_account_tests PRIVATE cmangos-compile-option-interface)
+add_test(NAME arch4_accounts COMMAND arch4_account_tests)
