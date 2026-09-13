@@ -249,7 +249,7 @@ namespace MMAP
         // load this tile :: mmaps/MMMXXYY.mmtile
         uint32 pathLen = basePath.length() + strlen(number == 0 ? TILE_FILE_NAME_FORMAT : TILE_ALT_FILE_NAME_FORMAT) + 1;
         std::unique_ptr<char[]> fileName(new char[pathLen]);
-        snprintf(fileName.get(), pathLen, (basePath + (number == 0 ? TILE_FILE_NAME_FORMAT : TILE_ALT_FILE_NAME_FORMAT)).c_str(), mapId, x, y);
+        snprintf(fileName.get(), pathLen, (basePath + (number == 0 ? TILE_FILE_NAME_FORMAT : TILE_ALT_FILE_NAME_FORMAT)).c_str(), mapId, x, y, number);
 
         return loadMapInternal(fileName.get(), mmapData, packedGridPos, mapId, x, y);
     }
@@ -264,8 +264,13 @@ namespace MMAP
         }
 
         // read header
-        MmapTileHeader fileHeader;
-        fread(&fileHeader, sizeof(MmapTileHeader), 1, file);
+        MmapTileHeader fileHeader{};
+        if (fread(&fileHeader, sizeof(MmapTileHeader), 1, file) != 1 || fileHeader.size > 64 * 1024 * 1024)
+        {
+            sLog.outError("MMAP:loadMap: Truncated header or oversized tile in %s", filePath);
+            fclose(file);
+            return false;
+        }
 
         if (fileHeader.mmapMagic != MMAP_MAGIC)
         {
@@ -288,6 +293,7 @@ namespace MMAP
         size_t result = fread(data, fileHeader.size, 1, file);
         if (!result)
         {
+            dtFree(data);
             sLog.outError("MMAP:loadMap: Bad header or data in mmap %s", filePath);
             fclose(file);
             return false;
@@ -295,11 +301,24 @@ namespace MMAP
 
         fclose(file);
 
-        dtMeshHeader* header = (dtMeshHeader*)data;
+        std::size_t const prefixSize = ManTech::SharedNavTileCache::PrefixSize(data, fileHeader.size);
+        if (!prefixSize)
+        {
+            dtFree(data);
+            sLog.outError("MMAP:loadMap: Invalid packed tile ranges in %s", filePath);
+            return false;
+        }
+        auto tail = ManTech::SharedNavTileCache::Acquire(filePath, data + prefixSize, data + fileHeader.size);
+        unsigned char* privateData = static_cast<unsigned char*>(dtAlloc(prefixSize, DT_ALLOC_PERM));
+        if (!privateData) { dtFree(data); return false; }
+        memcpy(privateData, data, prefixSize);
+        dtFree(data);
+        data = privateData;
+        dtMeshHeader* header = reinterpret_cast<dtMeshHeader*>(data);
         dtTileRef tileRef = 0;
 
-        // memory allocated for data is now managed by detour, and will be deallocated when the tile is removed
-        dtStatus dtResult = mmapData->navMesh->addTile(data, fileHeader.size, DT_TILE_FREE_DATA, 0, &tileRef);
+        // Mutable polygons, links and off-mesh endpoint vertices stay private to this instance.
+        dtStatus dtResult = mmapData->navMesh->addTileShared(data, static_cast<int>(prefixSize), DT_TILE_FREE_DATA, 0, &tileRef, tail->bytes.data());
         if (dtStatusFailed(dtResult))
         {
             sLog.outError("MMAP:loadMap: Could not load %s into navmesh", filePath);
@@ -308,6 +327,9 @@ namespace MMAP
         }
 
         mmapData->mmapLoadedTiles.insert(std::pair<uint32, dtTileRef>(packedGridPos, tileRef));
+        mmapData->tileTails.emplace(packedGridPos, std::move(tail));
+        mmapData->tilePrivateSizes.emplace(packedGridPos, prefixSize);
+        ManTech::MemoryLedger::Add(ManTech::MemoryKind::NavTiles, prefixSize);
         ++m_loadedTiles;
         DEBUG_FILTER_LOG(LOG_FILTER_MAP_LOADING, "MMAP:loadMap:%s: Loaded into %03i[%02i,%02i]", filePath, mapId, header->x, header->y);
         return true;
@@ -364,7 +386,9 @@ namespace MMAP
         size_t result = fread(data, fileHeader.size, 1, file);
         if (!result)
         {
-            sLog.outError("MMAP:loadGameObject: Bad header or data in mmap %s", fileName);
+            dtFree(data);
+            delete[] fileName;
+            sLog.outError("MMAP:loadGameObject: Bad tile data");
             fclose(file);
             return false;
         }
@@ -432,6 +456,9 @@ namespace MMAP
         }
         else
         {
+            ManTech::MemoryLedger::Remove(ManTech::MemoryKind::NavTiles, mmapData->tilePrivateSizes.at(packedGridPos));
+            mmapData->tilePrivateSizes.erase(packedGridPos);
+            mmapData->tileTails.erase(packedGridPos);
             mmapData->mmapLoadedTiles.erase(packedGridPos);
             --m_loadedTiles;
             DEBUG_FILTER_LOG(LOG_FILTER_MAP_LOADING, "MMAP:unloadMap: Unloaded mmtile %03i[%02i,%02i] from %03i", mapId, x, y, mapId);
@@ -498,12 +525,16 @@ namespace MMAP
             return false;
         }
 
-        const auto& mmapData = (*itr).second;
-        std::lock_guard<std::mutex> guard(mmapData->navMeshQueriesMutex);
-        uint64 const queryCount = mmapData->navMeshQueries.size();
-        for (auto& threadQuery : mmapData->navMeshQueries)
-            dtFreeNavMeshQuery(threadQuery.second);
-        mmapData->navMeshQueries.clear();
+        // Map destruction has already removed its units and joined its update work.
+        // Do not destroy the data (and its mutex) while holding that mutex's guard.
+        uint64 queryCount;
+        {
+            std::lock_guard<std::mutex> guard(itr->second->navMeshQueriesMutex);
+            queryCount = itr->second->navMeshQueries.size();
+        }
+        m_loadedTiles.fetch_sub(static_cast<uint32>(itr->second->mmapLoadedTiles.size()));
+        m_loadedMMaps.erase(itr);
+        ManTech::SharedNavTileCache::Prune();
         RecordQueryFree(false, queryCount);
         DEBUG_FILTER_LOG(LOG_FILTER_MAP_LOADING, "MMAP:unloadMapInstance: Unloaded mapId %03u instanceId %u", mapId, instanceId);
 

@@ -368,6 +368,11 @@ public:
 	///  @param[out]	result		The tile reference. (If the tile was succesfully added.) [opt]
 	/// @return The status flags for the operation.
 	dtStatus addTile(unsigned char* data, int dataSize, int flags, dtTileRef lastRef, dtTileRef* result);
+    // Arch 4: data owns the mutable header/vertices/polygons/links prefix.
+    // immutableTail must outlive the tile. It contains only detail geometry,
+    // BV nodes and off-mesh connection definitions; all link/area state stays private.
+    dtStatus addTileShared(unsigned char* data, int dataSize, int flags, dtTileRef lastRef, dtTileRef* result, unsigned char* immutableTail);
+
 	
 	/// Removes the specified tile from the navigation mesh.
 	///  @param[in]		ref			The reference of the tile to remove.

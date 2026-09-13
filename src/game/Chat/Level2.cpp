@@ -5512,7 +5512,7 @@ bool ChatHandler::HandleMmapStatsCommand(char* /*args*/)
     PSendSysMessage(" %u BVTree nodes", nodeCount);
     PSendSysMessage(" %u polygons (%u vertices)", polyCount, vertCount);
     PSendSysMessage(" %u triangles (%u vertices)", triCount, triVertCount);
-    PSendSysMessage(" %.2f MB of data (not including pointers)", ((float)dataSize / sizeof(unsigned char)) / 1048576);
+    PSendSysMessage(" %.2f MB of instance-private tile storage (shared geometry and pointers excluded)", ((float)dataSize / sizeof(unsigned char)) / 1048576);
 
     return true;
 }

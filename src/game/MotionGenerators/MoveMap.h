@@ -20,6 +20,7 @@
 #define _MOVE_MAP_H
 
 #include "Common.h"
+#include "Memory/SharedNavTile.h"
 #include <Detour/Include/DetourAlloc.h>
 #include <Detour/Include/DetourNavMesh.h>
 #include <Detour/Include/DetourNavMeshQuery.h>
@@ -53,6 +54,8 @@ namespace MMAP
         MMapData(dtNavMesh* mesh) : navMesh(mesh), fullLoaded(false) {}
         ~MMapData()
         {
+            for (auto const& tile : tilePrivateSizes)
+                ManTech::MemoryLedger::Remove(ManTech::MemoryKind::NavTiles, tile.second);
             for (auto& threadQuery : navMeshQueries)
                 dtFreeNavMeshQuery(threadQuery.second);
 
@@ -68,6 +71,8 @@ namespace MMAP
         std::mutex navMeshQueriesMutex;
         MMapTileSet mmapLoadedTiles;        // maps [map grid coords] to [dtTile]
 
+        std::unordered_map<uint32, std::shared_ptr<ManTech::SharedNavTail>> tileTails;
+        std::unordered_map<uint32, std::size_t> tilePrivateSizes;
         bool fullLoaded;
     };
 

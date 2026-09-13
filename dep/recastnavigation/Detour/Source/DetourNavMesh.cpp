@@ -905,8 +905,12 @@ int dtNavMesh::queryPolygonsInTile(const dtMeshTile* tile, const float* qmin, co
 /// removed from this nav mesh.
 ///
 /// @see dtCreateNavMeshData, #removeTile
-dtStatus dtNavMesh::addTile(unsigned char* data, int dataSize, int flags,
-							dtTileRef lastRef, dtTileRef* result)
+dtStatus dtNavMesh::addTile(unsigned char* data, int dataSize, int flags, dtTileRef lastRef, dtTileRef* result)
+{
+    return addTileShared(data, dataSize, flags, lastRef, result, 0);
+}
+
+dtStatus dtNavMesh::addTileShared(unsigned char* data, int dataSize, int flags, dtTileRef lastRef, dtTileRef* result, unsigned char* immutableTail)
 {
 	// Make sure the data is in right format.
 	dtMeshHeader* header = (dtMeshHeader*)data;
@@ -989,6 +993,7 @@ dtStatus dtNavMesh::addTile(unsigned char* data, int dataSize, int flags,
 	tile->verts = dtGetThenAdvanceBufferPointer<float>(d, vertsSize);
 	tile->polys = dtGetThenAdvanceBufferPointer<dtPoly>(d, polysSize);
 	tile->links = dtGetThenAdvanceBufferPointer<dtLink>(d, linksSize);
+    if (immutableTail) d = immutableTail;
 	tile->detailMeshes = dtGetThenAdvanceBufferPointer<dtPolyDetail>(d, detailMeshesSize);
 	tile->detailVerts = dtGetThenAdvanceBufferPointer<float>(d, detailVertsSize);
 	tile->detailTris = dtGetThenAdvanceBufferPointer<unsigned char>(d, detailTrisSize);
