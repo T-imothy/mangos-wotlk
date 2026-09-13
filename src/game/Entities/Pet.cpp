@@ -16,6 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include "Memory/EntityLedger.h"
 #include "Entities/Pet.h"
 #include "Database/DatabaseEnv.h"
 #include "Log/Log.h"
@@ -35,6 +36,7 @@ Pet::Pet(PetType type) :
     m_declinedname(nullptr), m_petModeFlags(PET_MODE_DEFAULT), m_originalCharminfo(nullptr), m_inStatsUpdate(false), m_scaleWithCls(false), m_dismissDisabled(false),
     m_controllableGuardian(false), m_doNotFollowMounted(false), m_glyphedStat(false)
 {
+    ManTech::EntityLedger::Add(ManTech::EntityKind::Pets);
     m_name = "Pet";
 
     // pets always have a charminfo, even if they are not actually charmed
@@ -43,6 +45,7 @@ Pet::Pet(PetType type) :
 
 Pet::~Pet()
 {
+    ManTech::EntityLedger::Remove(ManTech::EntityKind::Pets);
     delete m_originalCharminfo;
     delete m_declinedname;
 }
