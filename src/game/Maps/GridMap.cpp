@@ -23,6 +23,7 @@
 #include "Server/DBCEnums.h"
 #include "Server/DBCStores.h"
 #include "Maps/GridMap.h"
+#include "Config/Config.h"
 #include "Vmap/VMapFactory.h"
 #include "MotionGenerators/MoveMap.h"
 #include "World/World.h"
@@ -147,6 +148,8 @@ bool GridMap::loadData(char const* filename)
 
 void GridMap::unloadData()
 {
+    ManTech::MemoryLedger::Remove(ManTech::MemoryKind::Terrain, m_payloadBytes, 0);
+    m_payloadBytes = 0;
     if (m_area_map)    { delete[] m_area_map;    m_area_map = nullptr; }
     if (m_V9)          { delete[] m_V9;          m_V9 = nullptr; }
     if (m_V8)          { delete[] m_V8;          m_V8 = nullptr; }
@@ -172,6 +175,7 @@ bool GridMap::loadAreaData(FILE* in, uint32 offset, uint32 /*size*/)
     if (!(header.flags & MAP_AREA_NO_AREA))
     {
         m_area_map = new uint16 [16 * 16];
+        AccountPayload(sizeof(uint16) * (16 * 16));
         if (fread(m_area_map, sizeof(uint16), 16 * 16, in) != 16 * 16)
             return false;
     }
@@ -195,7 +199,9 @@ bool GridMap::loadHeightData(FILE* in, uint32 offset, uint32 /*size*/)
         if ((header.flags & MAP_HEIGHT_AS_INT16))
         {
             m_uint16_V9 = new uint16[129 * 129];
+            AccountPayload(sizeof(uint16) * (129 * 129));
             m_uint16_V8 = new uint16[128 * 128];
+            AccountPayload(sizeof(uint16) * (128 * 128));
             if (fread(m_uint16_V9, sizeof(uint16), 129 * 129, in) != 129 * 129 ||
                     fread(m_uint16_V8, sizeof(uint16), 128 * 128, in) != 128 * 128)
                 return false;
@@ -205,7 +211,9 @@ bool GridMap::loadHeightData(FILE* in, uint32 offset, uint32 /*size*/)
         else if ((header.flags & MAP_HEIGHT_AS_INT8))
         {
             m_uint8_V9 = new uint8[129 * 129];
+            AccountPayload(sizeof(uint8) * (129 * 129));
             m_uint8_V8 = new uint8[128 * 128];
+            AccountPayload(sizeof(uint8) * (128 * 128));
             if (fread(m_uint8_V9, sizeof(uint8), 129 * 129, in) != 129 * 129 ||
                     fread(m_uint8_V8, sizeof(uint8), 128 * 128, in) != 128 * 128)
                 return false;
@@ -215,7 +223,9 @@ bool GridMap::loadHeightData(FILE* in, uint32 offset, uint32 /*size*/)
         else
         {
             m_V9 = new float[129 * 129];
+            AccountPayload(sizeof(float) * (129 * 129));
             m_V8 = new float[128 * 128];
+            AccountPayload(sizeof(float) * (128 * 128));
             if (fread(m_V9, sizeof(float), 129 * 129, in) != 129 * 129 ||
                     fread(m_V8, sizeof(float), 128 * 128, in) != 128 * 128)
                 return false;
@@ -233,6 +243,7 @@ bool GridMap::loadHolesData(FILE* in, uint32 offset, uint32 /*size*/)
     if (fseek(in, offset, SEEK_SET) != 0)
         return false;
     m_holes = new uint16[16 * 16];
+    AccountPayload(sizeof(uint16) * (16 * 16));
     return fread(m_holes, sizeof(uint16), 16 * 16, in) == 16 * 16;
 }
 
@@ -257,10 +268,12 @@ bool GridMap::loadGridMapLiquidData(FILE* in, uint32 offset, uint32 /*size*/)
     if (!(header.flags & MAP_LIQUID_NO_TYPE))
     {
         m_liquidEntry = new uint16[16 * 16];
+        AccountPayload(sizeof(uint16) * (16 * 16));
         if (fread(m_liquidEntry, sizeof(uint16), 16 * 16, in) != 16 * 16)
             return false;
 
         m_liquidFlags = new uint8[16 * 16];
+        AccountPayload(sizeof(uint8) * (16 * 16));
         if (fread(m_liquidFlags, sizeof(uint8), 16 * 16, in) != 16 * 16)
             return false;
     }
@@ -268,6 +281,7 @@ bool GridMap::loadGridMapLiquidData(FILE* in, uint32 offset, uint32 /*size*/)
     if (!(header.flags & MAP_LIQUID_NO_HEIGHT))
     {
         m_liquid_map = new float[m_liquid_width * m_liquid_height];
+        AccountPayload(sizeof(float) * (m_liquid_width * m_liquid_height));
         if (fread(m_liquid_map, sizeof(float), m_liquid_width * m_liquid_height, in) != size_t(m_liquid_width * m_liquid_height))
             return false;
     }
@@ -789,7 +803,24 @@ void TerrainInfo::CleanUpGrids(const uint32 diff)
 {
     i_timer.Update(diff);
     if (!i_timer.Passed())
-        return;
+    {
+        // TerrainManager invokes this only after map workers have quiesced.
+        // Check inactive payload once per second; never evict a referenced tile.
+        m_budgetCheckMs += diff;
+        if (m_budgetCheckMs < 1000)
+            return;
+        m_budgetCheckMs = 0;
+        std::size_t inactiveBytes = 0;
+        for (int y = 0; y < MAX_NUMBER_OF_GRIDS; ++y)
+            for (int x = 0; x < MAX_NUMBER_OF_GRIDS; ++x)
+                if (m_GridMaps[x][y] && m_GridRef[x][y] == 0)
+                    inactiveBytes += m_GridMaps[x][y]->PayloadBytes();
+        const std::size_t budget = static_cast<std::size_t>(std::max(0, sConfig.GetIntDefault("Memory.InactiveTerrainBudgetMB", 64))) * 1024 * 1024;
+        if (inactiveBytes <= budget)
+            return;
+        sLog.outPerformance("ARCH4_TERRAIN_PRESSURE map=%u inactive_payload_bytes=%llu budget_bytes=%llu", m_mapId,
+            static_cast<unsigned long long>(inactiveBytes), static_cast<unsigned long long>(budget));
+    }
 
     for (int y = 0; y < MAX_NUMBER_OF_GRIDS; ++y)
     {

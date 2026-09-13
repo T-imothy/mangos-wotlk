@@ -20,6 +20,7 @@
 #define _MOVE_MAP_H
 
 #include "Common.h"
+#include "Memory/MemoryLedger.h"
 #include "Memory/SharedNavTile.h"
 #include <Detour/Include/DetourAlloc.h>
 #include <Detour/Include/DetourNavMesh.h>
@@ -29,6 +30,8 @@
 #include <mutex>
 
 class Unit;
+
+inline void FreeTrackedNavQuery(dtNavMeshQuery* query) { ManTech::MemoryLedger::Remove(ManTech::MemoryKind::NavQueries, query->getMemoryBytes()); dtFreeNavMeshQuery(query); }
 
 //  memory management
 inline void* dtCustomAlloc(size_t size, dtAllocHint /*hint*/)
@@ -57,7 +60,7 @@ namespace MMAP
             for (auto const& tile : tilePrivateSizes)
                 ManTech::MemoryLedger::Remove(ManTech::MemoryKind::NavTiles, tile.second);
             for (auto& threadQuery : navMeshQueries)
-                dtFreeNavMeshQuery(threadQuery.second);
+                FreeTrackedNavQuery(threadQuery.second);
 
             if (navMesh)
                 dtFreeNavMesh(navMesh);
@@ -82,7 +85,7 @@ namespace MMAP
         ~MMapGOData()
         {
             for (auto& navMeshQuerie : navMeshGOQueries)
-                dtFreeNavMeshQuery(navMeshQuerie.second);
+                FreeTrackedNavQuery(navMeshQuerie.second);
 
             if (navMesh)
                 dtFreeNavMesh(navMesh);

@@ -583,6 +583,7 @@ namespace MMAP
         ss << threadId;
         DEBUG_FILTER_LOG(LOG_FILTER_MAP_LOADING, "MMAP:GetNavMeshQuery: created thread-local dtNavMeshQuery for mapId %03u instanceId %u tid %s", mapId, instanceId, ss.str().c_str());
         itr->second->navMeshQueries.emplace(threadId, query);
+        ManTech::MemoryLedger::Add(ManTech::MemoryKind::NavQueries, query->getMemoryBytes());
         RecordQueryAllocation(false);
         return query;
     }
@@ -613,6 +614,7 @@ namespace MMAP
 
                 DETAIL_LOG("MMAP:GetModelNavMeshQuery: created dtNavMeshQuery for displayid %03u tid %s", displayId, ss.str().data());
                 mmapGOData->navMeshGOQueries.insert(std::pair<std::thread::id, dtNavMeshQuery*>(threadId, query));
+                ManTech::MemoryLedger::Add(ManTech::MemoryKind::NavQueries, query->getMemoryBytes());
                 RecordQueryAllocation(true);
             }
         }
