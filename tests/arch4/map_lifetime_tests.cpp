@@ -58,6 +58,8 @@ int main()
         CHECK(first && second && first!=second);
         std::thread worker([&]{CHECK(manager.GetNavMeshQuery(33,1001)!=first);});worker.join();
         CHECK(manager.getMapThreadQueryCount()==3);
+        CHECK(ManTech::MemoryLedger::Read(ManTech::MemoryKind::NavQueries).count==3);
+        CHECK(ManTech::MemoryLedger::Read(ManTech::MemoryKind::NavQueries).bytes>0);
         CHECK(manager.unloadMapInstance(33,1001));
         CHECK(manager.GetNavMesh(33,1001)==nullptr);
         CHECK(manager.getLoadedTilesCount()==1 && manager.getMapThreadQueryCount()==1);
@@ -66,6 +68,8 @@ int main()
         CHECK(manager.getLoadedMapsCount()==0 && manager.getLoadedTilesCount()==0 && manager.getMapThreadQueryCount()==0);
         CHECK(ManTech::MemoryLedger::Read(ManTech::MemoryKind::NavShared).bytes==0);
         CHECK(ManTech::MemoryLedger::Read(ManTech::MemoryKind::NavTiles).bytes==0);
+        CHECK(ManTech::MemoryLedger::Read(ManTech::MemoryKind::NavQueries).bytes==0);
+        CHECK(ManTech::MemoryLedger::Read(ManTech::MemoryKind::NavQueries).count==0);
     }
     CHECK(manager.getQueryAllocationCount()==manager.getQueryFreeCount());
     // Only remove the three files created by this test; no recursive deletion.
