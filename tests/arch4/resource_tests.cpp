@@ -43,6 +43,7 @@ int main()
     CHECK(MemoryLedger::Read(MemoryKind::Collision).count==before.count);
     auto file=std::filesystem::temp_directory_path()/std::filesystem::path("arch4-grid-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".map");
     GridMapFileHeader header{};
+    header.buildMagic=12340; // Wrath map headers also validate the client build.
     std::memcpy(&header.mapMagic,MAP_MAGIC,4);
     std::memcpy(&header.versionMagic,MAP_VERSION_MAGIC,4);
     header.areaMapOffset=sizeof(header);
