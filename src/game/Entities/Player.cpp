@@ -1,3 +1,4 @@
+#include "Util/DevDiagnostics.h"
 /*
  * This file is part of the CMaNGOS Project. See AUTHORS file for Copyright information
  *
@@ -1507,6 +1508,7 @@ bool Player::IsMirrorTimerActive(MirrorTimer::Type timer) const
 
 void Player::Update(const uint32 diff)
 {
+    MANTECH_DIAG_SCOPE(Player,32,nullptr);
     if (!IsInWorld())
         return;
 
