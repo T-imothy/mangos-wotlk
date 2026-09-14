@@ -131,7 +131,7 @@ void WorldObject::RemoveClientIAmAt(Player* player) {
     clients.erase(player); m_clientGUIDsIAmAt.erase(player->guid);
 }
 __REMOVE_AT_CLIENT__
-struct Logger { template<class... T> void outCustomLog(T...) {} } sLog;
+struct Logger { int count=0; template<class... T> void outCustomLog(T...) { ++count; } } sLog;
 struct VisibleNotifier {
     Camera& i_camera; GuidSet i_clientGUIDs; UpdateData& i_data;
     WorldObjectSet i_visibleNow; bool i_processSend;
@@ -167,8 +167,14 @@ void roaming(bool real) {
 }
 void missing(bool real) {
     Map map; Player p; p.map=&map; p.real=real; p.guids.insert(ObjectGuid(55));
+    sLog.count=0;
     Camera c{&p}; UpdateData data; VisibleNotifier(c,data,true).Notify();
     require(p.guids.empty(),"missing world object does not leave a dangling client GUID");
+#ifdef ENABLE_PLAYERBOTS
+    require(sLog.count==(real?1:0),"bot orphan cleanup adds no synchronous diagnostic log");
+#else
+    require(sLog.count==1,"human diagnostic preserved without playerbots");
+#endif
 }
 void exceptions(bool real) {
     Map map; Player p; p.map=&map; p.real=real; Camera c{&p};
