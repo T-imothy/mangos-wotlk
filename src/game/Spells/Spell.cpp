@@ -4043,16 +4043,22 @@ void Spell::SetCastItem(Item* item)
         m_itemCastSpell = true;
 }
 
+ItemPrototype const* Spell::GetCooldownItemPrototype() const
+{
+    return m_CastItem ? m_CastItem->GetProto() : nullptr;
+}
+
 void Spell::SendSpellCooldown()
 {
+    ItemPrototype const* cooldownItem = GetCooldownItemPrototype();
     bool permanent = m_spellInfo->HasAttribute(SPELL_ATTR_COOLDOWN_ON_EVENT);
     if (m_trueCaster->IsPlayer())
     {
         Player* casterPlayer = static_cast<Player*>(m_caster);
         uint32 category = m_spellInfo->Category;
-        if (m_CastItem)
+        if (cooldownItem)
         {
-            for (const auto& spell : m_CastItem->GetProto()->Spells)
+            for (const auto& spell : cooldownItem->Spells)
             {
                 if (spell.SpellId == m_spellInfo->Id && spell.SpellCategory)
                 {
@@ -4068,8 +4074,9 @@ void Spell::SendSpellCooldown()
                 if (categoryEntry->flags & uint32(SpellCategoryFlags::CooldownEventOnLeaveCombat))
                 {
                     // need in some way provided data for Spell::finish SendCooldownEvent
-                    if (m_CastItem && m_CastItem->IsPotion())
-                        casterPlayer->SetLastPotionId(m_CastItem->GetEntry());
+                    if (cooldownItem && cooldownItem->Class == ITEM_CLASS_CONSUMABLE &&
+                        cooldownItem->SubClass == ITEM_SUBCLASS_POTION)
+                        casterPlayer->SetLastPotionId(cooldownItem->ItemId);
 
                     permanent |= true;
                     casterPlayer->SetCooldownEventOnLeaveCombatSpellId(m_spellInfo->Id);
@@ -4090,7 +4097,7 @@ void Spell::SendSpellCooldown()
     if (portableUtility)
         permanent = false;
 
-    m_trueCaster->AddCooldown(*m_spellInfo, m_CastItem ? m_CastItem->GetProto() : nullptr, permanent);
+    m_trueCaster->AddCooldown(*m_spellInfo, cooldownItem, permanent);
 
     if (portableUtility && m_trueCaster->GetTypeId() == TYPEID_PLAYER)
     {
