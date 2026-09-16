@@ -25,7 +25,7 @@ EndScriptData */
 #include "icecrown_citadel.h"
 #include "AI/ScriptDevAI/base/CombatAI.h"
 #include "AI/BaseAI/GameObjectAI.h"
-#include "AI/ScriptDevAI/base/CombatAI.h"
+#include "Entities/Transports.h"
 #include "AI/ScriptDevAI/base/TimerAI.h"
 
 /*#####
