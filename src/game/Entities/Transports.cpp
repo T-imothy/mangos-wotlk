@@ -19,6 +19,7 @@
 #include "Common.h"
 
 #include "Entities/Transports.h"
+#include "Entities/TransportInstanceRouting.h"
 #include "Maps/MapManager.h"
 #include "Globals/ObjectMgr.h"
 #include "Entities/ObjectGuid.h"
@@ -354,7 +355,10 @@ void Transport::TeleportTransport(uint32 newMapid, float x, float y, float z, fl
     Map* oldMap = GetMap();
     Relocate(x, y, z);
 
-    uint32 const newInstanceId = sMapMgr.GetContinentInstanceId(newMapid, x, y);
+    // Preserve dungeon/raid ownership on same-map transport teleports.
+    uint32 const newInstanceId = MaNGOS::TransportDestinationInstance(
+        GetMapId(), GetInstanceId(), newMapid,
+        newMapid <= 1 ? sMapMgr.GetContinentInstanceId(newMapid, x, y) : 0);
     bool const mapChange = GetMapId() != newMapid || GetInstanceId() != newInstanceId;
     bool playerPassenger = false;
 

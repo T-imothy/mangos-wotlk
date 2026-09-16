@@ -3,6 +3,12 @@ target_compile_features(arch4_memory_tests PRIVATE cxx_std_20)
 target_include_directories(arch4_memory_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/shared)
 add_test(NAME arch4_memory COMMAND arch4_memory_tests)
 
+add_executable(icc_transport_instance_tests transport_instance_tests.cpp)
+target_compile_features(icc_transport_instance_tests PRIVATE cxx_std_20)
+target_include_directories(icc_transport_instance_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/game)
+target_link_libraries(icc_transport_instance_tests PRIVATE cmangos-compile-option-interface)
+add_test(NAME icc_transport_instances COMMAND icc_transport_instance_tests)
+
 add_executable(arch4_event_tests event_tests.cpp)
 target_link_libraries(arch4_event_tests PRIVATE game shared g3dlite Detour)
 add_test(NAME arch4_events COMMAND arch4_event_tests)

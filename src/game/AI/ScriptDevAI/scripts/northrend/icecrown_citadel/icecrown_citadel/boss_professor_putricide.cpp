@@ -53,13 +53,15 @@ enum
     SPELL_GREEN_OOZE_SUMMON         = 71412,                // triggers 71413 to summon 37697
 
     // Slime puddle summon
-    SPELL_SLIME_PUDDLE_TRIGGER      = 70341,                // triggers 70342 to summon 37690
+    SPELL_SLIME_PUDDLE_SUMMON       = 70341,                // triggers 70342 to summon 37690
+    SPELL_SLIME_PUDDLE_TRIGGER      = 71424,                // selects two players and triggers 71425
 
     SPELL_UNSTABLE_EXPERIMENT       = 70351,                // triggers 71412 or 71415 alternatively
 
     // Phase 2 spells
     SPELL_CREATE_CONCOCTION         = 71621,                // transform spell
     SPELL_MALLEABLE_GOO             = 70852,
+    SPELL_MALLEABLE_GOO_SELECTOR    = 72295,
     SPELL_CHOKING_GAS_BOMB          = 71255,                // triggers 71273
 
     // Tear Gas - phase transitions
@@ -217,7 +219,8 @@ enum Waypoint
 
 enum PutricideActions
 {
-    PUTRICIDE_ACTION_PHASE_CHANGE,
+    PUTRICIDE_ACTION_PHASE_TWO,
+    PUTRICIDE_ACTION_PHASE_THREE,
     PUTRICIDE_ACTION_BERSERK,
     PUTRICIDE_ACTION_SLIME_PUDDLE,
     PUTRICIDE_ACTION_UNSTABLE_EXPERIMENT,
@@ -243,7 +246,8 @@ struct boss_professor_putricideAI : public CombatAI
     boss_professor_putricideAI(Creature* creature) : CombatAI(creature, PUTRICIDE_ACTIONS_MAX),
         m_instance(static_cast<instance_icecrown_citadel*>(creature->GetInstanceData()))
     {
-        AddTimerlessCombatAction(PUTRICIDE_ACTION_PHASE_CHANGE, true);
+        AddTimerlessCombatAction(PUTRICIDE_ACTION_PHASE_TWO, true);
+        AddTimerlessCombatAction(PUTRICIDE_ACTION_PHASE_THREE, true);
         AddCombatAction(PUTRICIDE_ACTION_BERSERK, true);
         AddCombatAction(PUTRICIDE_ACTION_SLIME_PUDDLE, true);
         AddCombatAction(PUTRICIDE_ACTION_UNSTABLE_EXPERIMENT, true);
@@ -322,7 +326,7 @@ struct boss_professor_putricideAI : public CombatAI
         // Native encounter cleanup removes the player's abomination vehicle
         // and the two laboratory tentacle visuals.  These must run on victory
         // as well as evade or they can keep the room in combat after death.
-        m_creature->CastSpell(m_creature, SPELL_CLEANSE_MUTATION, TRIGGERED_OLD_TRIGGERED);
+        m_creature->CastSpell(nullptr, SPELL_CLEANSE_MUTATION, TRIGGERED_OLD_TRIGGERED);
         if (m_instance)
         {
             if (Creature* tentacle = m_instance->GetSingleCreatureFromStorage(NPC_OOZE_TENTACLE_STALKER))
@@ -374,15 +378,13 @@ struct boss_professor_putricideAI : public CombatAI
                 if (player->IsAlive() && !player->IsGameMaster() && m_creature->IsWithinDistInMap(player, 120.0f))
                     targets.push_back(player);
 
+        std::shuffle(targets.begin(), targets.end(), *GetRandomGenerator());
         bool oozeVariable = urand(0, 1) != 0;
-        while (!targets.empty())
+        for (Player* player : targets)
         {
-            size_t index = urand(0, targets.size() - 1);
-            Player* player = targets[index];
-            player->CastSpell(player, oozeVariable ? SPELL_OOZE_VARIABLE_OOZE : SPELL_GAS_VARIABLE_GAS,
+            player->CastSpell(nullptr, oozeVariable ? SPELL_OOZE_VARIABLE_OOZE : SPELL_GAS_VARIABLE_GAS,
                 TRIGGERED_OLD_TRIGGERED);
             oozeVariable = !oozeVariable;
-            targets.erase(targets.begin() + index);
         }
     }
 
@@ -393,7 +395,7 @@ struct boss_professor_putricideAI : public CombatAI
 
         m_instance->SetData(TYPE_PROFESSOR_PUTRICIDE, IN_PROGRESS);
         DoBroadcastText(SAY_AGGRO, m_creature);
-        DoCastSpellIfCan(m_creature, SPELL_OOZE_TANK_PROTECTION, CAST_TRIGGERED);
+        DoCastSpellIfCan(nullptr, SPELL_OOZE_TANK_PROTECTION, CAST_TRIGGERED);
         m_creature->SetInCombatWithZone();
         ResetCombatAction(PUTRICIDE_ACTION_BERSERK, 10min);
         PreparePhaseActions();
@@ -406,8 +408,8 @@ struct boss_professor_putricideAI : public CombatAI
 
         DoBroadcastText(SAY_DEATH, m_creature);
         if (m_instance && m_instance->Is25ManDifficulty() && m_creature->HasAura(SPELL_SHADOWS_FATE))
-            m_creature->CastSpell(m_creature, SPELL_UNHOLY_INFUSION_CREDIT, TRIGGERED_OLD_TRIGGERED);
-        m_creature->CastSpell(m_creature, SPELL_MUTATED_PLAGUE_CLEAR, TRIGGERED_OLD_TRIGGERED);
+            m_creature->CastSpell(nullptr, SPELL_UNHOLY_INFUSION_CREDIT, TRIGGERED_OLD_TRIGGERED);
+        m_creature->CastSpell(nullptr, SPELL_MUTATED_PLAGUE_CLEAR, TRIGGERED_OLD_TRIGGERED);
         CleanupEncounterAuras();
         CleanupEncounterSummons();
     }
@@ -434,7 +436,7 @@ struct boss_professor_putricideAI : public CombatAI
             if (!m_instance)
                 return;
 
-            DoCastSpellIfCan(m_creature, (m_phase == PHASE_RUNNING_ONE ? SPELL_CREATE_CONCOCTION : SPELL_GUZZLE_POTIONS));
+            DoCastSpellIfCan(nullptr, (m_phase == PHASE_RUNNING_ONE ? SPELL_CREATE_CONCOCTION : SPELL_GUZZLE_POTIONS));
 
             if (m_instance->IsHeroicDifficulty())
             {
@@ -458,18 +460,17 @@ struct boss_professor_putricideAI : public CombatAI
         switch (pSummoned->GetEntry())
         {
             case NPC_GROWING_OOZE_PUDDLE:
-                pSummoned->CastSpell(pSummoned, SPELL_GROW_STACKER, TRIGGERED_OLD_TRIGGERED);
-                pSummoned->CastSpell(pSummoned, SPELL_SLIME_PUDDLE_DAMAGE, TRIGGERED_OLD_TRIGGERED);
-                for (uint8 i = 0; i < 7; ++i)
-                    pSummoned->CastSpell(pSummoned, SPELL_GROW, TRIGGERED_OLD_TRIGGERED);
+                pSummoned->CastSpell(nullptr, SPELL_GROW_STACKER, TRIGGERED_OLD_TRIGGERED);
+                pSummoned->CastSpell(nullptr, SPELL_SLIME_PUDDLE_DAMAGE, TRIGGERED_OLD_TRIGGERED);
+                pSummoned->CastSpell(nullptr, SPELL_GROW, TRIGGERED_OLD_TRIGGERED);
                 break;
             case NPC_CHOKING_GAS_BOMB:
-                pSummoned->CastSpell(pSummoned, SPELL_CHOKING_GAS_PERIODIC, TRIGGERED_OLD_TRIGGERED);
-                pSummoned->CastSpell(pSummoned, SPELL_CHOKING_GAS_EXPLOSION_PER, TRIGGERED_OLD_TRIGGERED);
+                pSummoned->CastSpell(nullptr, SPELL_CHOKING_GAS_PERIODIC, TRIGGERED_OLD_TRIGGERED);
+                pSummoned->CastSpell(nullptr, SPELL_CHOKING_GAS_EXPLOSION_PER, TRIGGERED_OLD_TRIGGERED);
                 pSummoned->ForcedDespawn(15000);
                 break;
             case NPC_GAS_CLOUD:
-                pSummoned->CastSpell(pSummoned, SPELL_GASEOUS_BLOAT_VISUAL, TRIGGERED_OLD_TRIGGERED);
+                pSummoned->CastSpell(nullptr, SPELL_GASEOUS_BLOAT_VISUAL, TRIGGERED_OLD_TRIGGERED);
             // no break;
             case NPC_VOLATILE_OOZE:
                 pSummoned->SetInCombatWithZone();
@@ -510,7 +511,8 @@ struct boss_professor_putricideAI : public CombatAI
 
     void DisablePhaseActions()
     {
-        SetActionReadyStatus(PUTRICIDE_ACTION_PHASE_CHANGE, false);
+        SetActionReadyStatus(PUTRICIDE_ACTION_PHASE_TWO, false);
+        SetActionReadyStatus(PUTRICIDE_ACTION_PHASE_THREE, false);
         DisableCombatAction(PUTRICIDE_ACTION_SLIME_PUDDLE);
         DisableCombatAction(PUTRICIDE_ACTION_UNSTABLE_EXPERIMENT);
         DisableCombatAction(PUTRICIDE_ACTION_UNBOUND_PLAGUE);
@@ -522,7 +524,10 @@ struct boss_professor_putricideAI : public CombatAI
     void PreparePhaseActions()
     {
         DisablePhaseActions();
-        SetActionReadyStatus(PUTRICIDE_ACTION_PHASE_CHANGE, true);
+        if (m_phase == PHASE_ONE)
+            SetActionReadyStatus(PUTRICIDE_ACTION_PHASE_TWO, true);
+        else if (m_phase == PHASE_TWO)
+            SetActionReadyStatus(PUTRICIDE_ACTION_PHASE_THREE, true);
 
         ResetCombatAction(PUTRICIDE_ACTION_SLIME_PUDDLE, m_phase == PHASE_ONE ? 10s : 35s);
         switch (m_phase)
@@ -552,7 +557,7 @@ struct boss_professor_putricideAI : public CombatAI
     void StartPhaseTransition()
     {
         uint32 const spellId = m_instance->IsHeroicDifficulty() ? SPELL_VOLATILE_EXPERIMENT : SPELL_TEAR_GAS;
-        if (DoCastSpellIfCan(m_creature, spellId, CAST_INTERRUPT_PREVIOUS) != CAST_OK)
+        if (DoCastSpellIfCan(nullptr, spellId, CAST_INTERRUPT_PREVIOUS) != CAST_OK)
             return;
 
         // Retail transition movement is twice Putricide's normal run speed.
@@ -570,12 +575,13 @@ struct boss_professor_putricideAI : public CombatAI
     {
         if (m_phase == PHASE_ONE || m_phase == PHASE_TWO)
         {
-            DoCastSpellIfCan(m_creature, SPELL_TEAR_GAS_PERIODIC, CAST_TRIGGERED);
+            DoCastSpellIfCan(nullptr, SPELL_TEAR_GAS_PERIODIC, CAST_TRIGGERED);
 
-            float x, y, z;
             m_creature->GetMotionMaster()->Clear();
-            m_creature->GetRespawnCoord(x, y, z);
-            m_creature->GetMotionMaster()->MovePoint(POINT_PUTRICIDE_SPAWN, x, y, z, FORCED_MOVEMENT_RUN);
+            // Retail 10-player sniff: Putricide runs to the laboratory table at
+            // this exact position before casting his transition spell.
+            m_creature->GetMotionMaster()->MovePoint(POINT_PUTRICIDE_SPAWN,
+                Position(4356.193f, 3262.9001f, 389.48157f, 1.4835298f), FORCED_MOVEMENT_RUN);
             m_phase = m_phase == PHASE_ONE ? PHASE_RUNNING_ONE : PHASE_RUNNING_TWO;
             return;
         }
@@ -621,38 +627,27 @@ struct boss_professor_putricideAI : public CombatAI
     {
         switch (action)
         {
-            case PUTRICIDE_ACTION_PHASE_CHANGE:
-                if ((m_phase == PHASE_ONE && m_creature->GetHealthPercent() <= 80.0f) ||
-                    (m_phase == PHASE_TWO && m_creature->GetHealthPercent() <= 35.0f))
+            case PUTRICIDE_ACTION_PHASE_TWO:
+                if (m_phase == PHASE_ONE && m_creature->GetHealthPercent() <= 80.0f)
+                    StartPhaseTransition();
+                break;
+            case PUTRICIDE_ACTION_PHASE_THREE:
+                if (m_phase == PHASE_TWO && m_creature->GetHealthPercent() <= 35.0f)
                     StartPhaseTransition();
                 break;
             case PUTRICIDE_ACTION_BERSERK:
-                if (DoCastSpellIfCan(m_creature, SPELL_BERSERK) == CAST_OK)
+                if (DoCastSpellIfCan(nullptr, SPELL_BERSERK) == CAST_OK)
                 {
                     DoBroadcastText(SAY_BERSERK, m_creature);
                     DisableCombatAction(action);
                 }
                 break;
             case PUTRICIDE_ACTION_SLIME_PUDDLE:
-            {
-                std::vector<Unit*> targets;
-                m_creature->SelectAttackingTargets(targets, ATTACKING_TARGET_ALL_SUITABLE, 0, nullptr, SELECT_FLAG_PLAYER);
-
-                uint32 puddles = 0;
-                while (!targets.empty() && puddles < 2)
-                {
-                    uint32 index = urand(0, targets.size() - 1);
-                    DoCastSpellIfCan(targets[index], SPELL_SLIME_PUDDLE_TRIGGER, CAST_TRIGGERED);
-                    targets.erase(targets.begin() + index);
-                    ++puddles;
-                }
-
-                if (puddles)
+                if (DoCastSpellIfCan(nullptr, SPELL_SLIME_PUDDLE_TRIGGER, CAST_TRIGGERED) == CAST_OK)
                     ResetCombatAction(action, 35s);
                 break;
-            }
             case PUTRICIDE_ACTION_UNSTABLE_EXPERIMENT:
-                if (DoCastSpellIfCan(m_creature, SPELL_UNSTABLE_EXPERIMENT) == CAST_OK)
+                if (DoCastSpellIfCan(nullptr, SPELL_UNSTABLE_EXPERIMENT) == CAST_OK)
                     ResetCombatAction(action, urand(35000, 40000));
                 break;
             case PUTRICIDE_ACTION_UNBOUND_PLAGUE:
@@ -664,44 +659,16 @@ struct boss_professor_putricideAI : public CombatAI
                     }
                 break;
             case PUTRICIDE_ACTION_CHOKING_GAS_BOMB:
-                if (DoCastSpellIfCan(m_creature, SPELL_CHOKING_GAS_BOMB) == CAST_OK)
+                if (DoCastSpellIfCan(nullptr, SPELL_CHOKING_GAS_BOMB) == CAST_OK)
                     ResetCombatAction(action, urand(35000, 40000));
                 break;
             case PUTRICIDE_ACTION_MALLEABLE_GOO:
-            {
-                std::vector<Unit*> targets;
-                m_creature->SelectAttackingTargets(targets, ATTACKING_TARGET_ALL_SUITABLE, 0, nullptr,
-                    SELECT_FLAG_PLAYER | SELECT_FLAG_SKIP_TANK);
-
-                for (auto itr = targets.begin(); itr != targets.end();)
+                if (DoCastSpellIfCan(nullptr, SPELL_MALLEABLE_GOO_SELECTOR, CAST_TRIGGERED) == CAST_OK)
                 {
-                    Unit* target = *itr;
-                    if (!target->IsAlive() || static_cast<Player*>(target)->IsGameMaster() ||
-                        m_creature->IsWithinDistInMap(target, 7.0f))
-                        itr = targets.erase(itr);
-                    else
-                        ++itr;
-                }
-
-                uint32 maxTargets = 1;
-                if (IsPutricide25Man(m_creature))
-                    maxTargets = m_creature->GetMap()->GetDifficulty() == RAID_DIFFICULTY_25MAN_HEROIC ? 3 : 2;
-
-                uint32 casts = 0;
-                while (!targets.empty() && casts < maxTargets)
-                {
-                    size_t const index = urand(0, targets.size() - 1);
-                    m_creature->CastSpell(targets[index], SPELL_MALLEABLE_GOO, TRIGGERED_OLD_TRIGGERED);
-                    targets.erase(targets.begin() + index);
-                    ++casts;
-                }
-
-                if (casts)
                     DoBroadcastText(EMOTE_MALLEABLE_GOO, m_creature);
-
-                ResetCombatAction(action, urand(25000, 30000));
+                    ResetCombatAction(action, urand(25000, 30000));
+                }
                 break;
-            }
             case PUTRICIDE_ACTION_MUTATED_PLAGUE:
                 if (DoCastSpellIfCan(m_creature->GetVictim(), SPELL_MUTATED_PLAGUE) == CAST_OK)
                     ResetCombatAction(action, 10s);
@@ -716,63 +683,55 @@ struct OozeFloodTrigger : public SpellScript
     void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
     {
         Unit* target = spell->GetUnitTarget();
-        instance_icecrown_citadel* pInstance = dynamic_cast<instance_icecrown_citadel*>(target->GetInstanceData());
-        if (!pInstance)
+        if (!target || effIdx != EFFECT_INDEX_0)
             return;
 
-        // Defind the target as one of the stalkers from the top of the taps
-        GuidList lStalkersGuidList;
-        pInstance->GetRotfaceStalkersList(lStalkersGuidList);
-
-        std::vector<Creature*> vTapStalkers;
-        vTapStalkers.reserve(lStalkersGuidList.size());
-
-        for (GuidList::const_iterator itr = lStalkersGuidList.begin(); itr != lStalkersGuidList.end(); ++itr)
-        {
-            if (Creature* pStalker = target->GetMap()->GetCreature(*itr))
-                vTapStalkers.push_back(pStalker);
-        }
-
-        if (vTapStalkers.empty())
+        std::vector<Creature*> const* tapStalkers = target->GetMap()->GetCreatures("ICC_ROTFACE_OOZE_FLOOD_UPPER");
+        if (!tapStalkers || tapStalkers->empty())
         {
             script_error_log("Instance Icecrown Citadel: ERROR Failed to properly find creature %u for Ooze Flood event.", NPC_PUDDLE_STALKER);
             return;
         }
 
-        // pick random target of the tap stalkers
-        Creature* pTarget = vTapStalkers[urand(0, vTapStalkers.size() - 1)];
-        if (!pTarget)
-            return;
-
-        // Get the nearest twin tap stalker.  The old loop simply kept the
-        // last stalker returned by the grid visitor, which could pair taps
-        // from unrelated flood lanes.
-        Creature* pNearTarget = nullptr;
-        float fNearDistance = 30.0f;
-        CreatureList lTargetsInRange;
-        GetCreatureListWithEntryInGrid(lTargetsInRange, pTarget, pTarget->GetEntry(), 30.0f);
-
-        if (lTargetsInRange.empty())
-            return;
-
-        // Find only the nearest *other* upper tap trigger.
-        for (CreatureList::const_iterator itr = lTargetsInRange.begin(); itr != lTargetsInRange.end(); ++itr)
-        {
-            float fDistance = pTarget->GetDistance(*itr);
-            if (*itr != pTarget && (*itr)->GetPositionZ() > 370.0f && fDistance < fNearDistance)
-            {
-                pNearTarget = *itr;
-                fNearDistance = fDistance;
-            }
-        }
-
-        if (!pNearTarget)
-            return;
-
-        // cast the triggered spell on each target
-        target->CastSpell(pTarget, spell->m_spellInfo->CalculateSimpleValue(effIdx), TRIGGERED_OLD_TRIGGERED);
-        target->CastSpell(pNearTarget, spell->m_spellInfo->CalculateSimpleValue(effIdx), TRIGGERED_OLD_TRIGGERED);
+        // The 69782 script target selects the paired upper tap in the same
+        // lane; 69783 then selects the closest lower floor stalker.
+        Creature* tapStalker = (*tapStalkers)[urand(0, tapStalkers->size() - 1)];
+        tapStalker->CastSpell(nullptr, spell->m_spellInfo->CalculateSimpleValue(effIdx), TRIGGERED_OLD_TRIGGERED);
         DoBroadcastText(urand(0, 1) ? SAY_SLIME_FLOW_1 : SAY_SLIME_FLOW_2, target);
+    }
+};
+
+// 71424 - Slime Puddle Trigger
+struct PutricideSlimePuddleSelector : public SpellScript
+{
+    void OnInit(Spell* spell) const override
+    {
+        spell->SetMaxAffectedTargets(2);
+    }
+
+    bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex effIdx) const override
+    {
+        if (effIdx != EFFECT_INDEX_0)
+            return true;
+
+        Unit* caster = spell->GetCaster();
+        return caster && target && target->IsPlayer() && target->IsAlive() &&
+            !static_cast<Player*>(target)->IsGameMaster() && caster->CanAttack(target);
+    }
+};
+
+// 71425 - Slime Puddle Summon Trigger 1
+struct PutricideSlimePuddleTarget : public SpellScript
+{
+    void OnSummon(Spell* spell, Creature* summon) const override
+    {
+        if (!summon || summon->GetEntry() != 38234)
+            return;
+
+        instance_icecrown_citadel* instance = dynamic_cast<instance_icecrown_citadel*>(spell->GetCaster()->GetInstanceData());
+        Creature* professor = instance ? instance->GetSingleCreatureFromStorage(NPC_PROFESSOR_PUTRICIDE) : nullptr;
+        if (professor && professor->IsAlive())
+            professor->CastSpell(summon, SPELL_SLIME_PUDDLE_SUMMON, TRIGGERED_OLD_TRIGGERED);
     }
 };
 
@@ -806,29 +765,9 @@ struct PutricideSlimePuddle : public SpellScript
             return false;
 
         float radius = 2.5f * caster->GetObjectScale();
-        return caster->GetDistance2d(target->GetPositionX(), target->GetPositionY(), DIST_CALC_NONE) <= radius * radius;
+        return caster->GetDistance2d(target->GetPositionX(), target->GetPositionY(), DIST_CALC_COMBAT_REACH) <= radius;
     }
 };
-
-Unit* SelectPutricideOozeTarget(Creature* creature, uint32 channelSpellId)
-{
-    uint32 const protectionSpellId = channelSpellId == SPELL_OOZE_ADHESIVE ?
-        SPELL_VOLATILE_OOZE_PROTECTION : SPELL_GASEOUS_BLOAT_PROTECTION;
-
-    std::vector<Unit*> targets;
-    for (auto& playerRef : creature->GetMap()->GetPlayers())
-    {
-        Player* player = playerRef.getSource();
-        if (!player || !player->IsAlive() || player->IsGameMaster() || !creature->CanAttack(player) ||
-            !creature->IsWithinDistInMap(player, 120.0f) ||
-            player->HasAuraOfDifficulty(protectionSpellId))
-            continue;
-
-        targets.push_back(player);
-    }
-
-    return targets.empty() ? nullptr : targets[urand(0, targets.size() - 1)];
-}
 
 /*######
 ## npc_volatile_ooze_icc
@@ -849,21 +788,17 @@ struct npc_putricide_oozeAI : public CombatAI
     uint32 m_channelSpellId;
     uint32 m_explosionSpellId;
 
-    bool IsFixationTarget(Unit const* target) const
-    {
-        return target && target->GetObjectGuid() == m_targetGuid;
-    }
-
     void StartFixation(Unit* target)
     {
-        if (!IsFixationTarget(target))
+        if (!target)
             return;
 
+        m_targetGuid = target->GetObjectGuid();
         m_creature->DeleteThreatList();
         SetReactState(REACT_AGGRESSIVE);
         SetCombatMovement(true);
+        m_creature->FixateTarget(target);
         AttackStart(target);
-        m_creature->AddThreat(target, 500000000.0f);
     }
 
     void ResetFixation(uint32 delay = 1000)
@@ -874,6 +809,7 @@ struct npc_putricide_oozeAI : public CombatAI
                 m_creature->FinishSpell(CURRENT_CHANNELED_SPELL);
 
         SetReactState(REACT_PASSIVE);
+        m_creature->FixateTarget(nullptr);
         m_creature->AttackStop();
         m_creature->DeleteThreatList();
         SetCombatMovement(false, true);
@@ -947,7 +883,7 @@ struct npc_putricide_oozeAI : public CombatAI
             {
                 uint32 const adhesiveId = GetPutricideDifficultySpellId(who, SPELL_OOZE_ADHESIVE);
                 if (who->GetSpellAuraHolder(adhesiveId, m_creature->GetObjectGuid()) &&
-                    DoCastSpellIfCan(m_creature, m_explosionSpellId) == CAST_OK)
+                    DoCastSpellIfCan(nullptr, m_explosionSpellId) == CAST_OK)
                     exploded = true;
             }
 
@@ -970,20 +906,9 @@ struct npc_putricide_oozeAI : public CombatAI
             return;
         }
 
-        Unit* target = SelectPutricideOozeTarget(m_creature, m_channelSpellId);
-        if (!target)
-        {
-            ResetTimer(PUTRICIDE_ADD_ACTION_TARGET, 1s);
-            return;
-        }
-
-        SpellCastArgs args;
-        args.SetTarget(m_creature).SetScriptValue(target->GetObjectGuid().GetRawValue());
-        m_targetGuid = target->GetObjectGuid();
-        if (m_creature->CastSpell(args, m_channelSpellId, TRIGGERED_NONE) == SPELL_CAST_OK)
+        if (DoCastSpellIfCan(nullptr, m_channelSpellId) == CAST_OK)
             return;
 
-        m_targetGuid.Clear();
         ResetTimer(PUTRICIDE_ADD_ACTION_TARGET, 1s);
     }
 };
@@ -1008,10 +933,22 @@ struct npc_gas_cloud_iccAI : public npc_putricide_oozeAI
 // 70672, 72455, 72832, 72833 - Gaseous Bloat
 struct PutricideOozeChannel : public SpellScript, public AuraScript
 {
+    void OnInit(Spell* spell) const override
+    {
+        spell->SetMaxAffectedTargets(1);
+    }
+
     bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex /*effIdx*/) const override
     {
-        return target && target->IsPlayer() &&
-            target->GetObjectGuid() == ObjectGuid(spell->GetScriptValue());
+        Unit* caster = spell->GetCaster();
+        if (!caster || !target || !target->IsPlayer() || !target->IsAlive() ||
+            static_cast<Player*>(target)->IsGameMaster() || !caster->CanAttack(target) ||
+            !caster->IsWithinDistInMap(target, 120.0f))
+            return false;
+
+        uint32 const protectionSpellId = IsGaseousBloatSpell(spell->m_spellInfo->Id) ?
+            SPELL_GASEOUS_BLOAT_PROTECTION : SPELL_VOLATILE_OOZE_PROTECTION;
+        return !target->HasAuraOfDifficulty(protectionSpellId);
     }
 
     void OnHit(Spell* spell, SpellMissInfo missInfo) const override
@@ -1056,7 +993,7 @@ struct PutricideMutationInit : public SpellScript, public AuraScript
         if (!caster || !caster->IsPlayer())
             return SPELL_FAILED_BAD_TARGETS;
 
-        instance_icecrown_citadel* instance = static_cast<instance_icecrown_citadel*>(caster->GetInstanceData());
+        instance_icecrown_citadel* instance = dynamic_cast<instance_icecrown_citadel*>(caster->GetInstanceData());
         if (!instance || instance->GetData(TYPE_PROFESSOR_PUTRICIDE) != IN_PROGRESS)
             return SPELL_FAILED_CANT_DO_THAT_RIGHT_NOW;
 
@@ -1106,15 +1043,9 @@ struct PutricideMutatedTransformation : public SpellScript
 
         summon->SetSpellList(infusionEligible ? SPELL_LIST_ABOMINATION_INFUSION : SPELL_LIST_ABOMINATION_STANDARD);
 
-        summon->CastSpell(summon, SPELL_POWER_DRAIN, TRIGGERED_OLD_TRIGGERED);
-        summon->CastSpell(summon, SPELL_TRANSFORMATION_DAMAGE, TRIGGERED_OLD_TRIGGERED);
+        summon->CastSpell(nullptr, SPELL_POWER_DRAIN, TRIGGERED_OLD_TRIGGERED);
+        summon->CastSpell(nullptr, SPELL_TRANSFORMATION_DAMAGE, TRIGGERED_OLD_TRIGGERED);
         caster->CastSpell(summon, SPELL_TRANSFORMATION_NAME, TRIGGERED_OLD_TRIGGERED);
-
-        summon->SetPowerType(POWER_ENERGY);
-        summon->SetMaxPower(POWER_ENERGY, 100);
-        summon->SetPower(POWER_ENERGY, 0);
-        summon->SetStatFloatValue(UNIT_FIELD_POWER_REGEN_INTERRUPTED_FLAT_MODIFIER, 0.0f);
-        summon->SetStatFloatValue(UNIT_FIELD_POWER_REGEN_FLAT_MODIFIER, 0.0f);
     }
 };
 
@@ -1217,6 +1148,14 @@ struct PutricideMalleableGoo : public SpellScript
         return caster && target && target->IsPlayer() && target->IsAlive() &&
             !static_cast<Player*>(target)->IsGameMaster() && target != caster->GetVictim() &&
             !caster->IsWithinDistInMap(target, 7.0f) && caster->CanAttack(target);
+    }
+
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        Unit* caster = spell->GetCaster();
+        Unit* target = spell->GetUnitTarget();
+        if (caster && target && effIdx == EFFECT_INDEX_0)
+            caster->CastSpell(target, spell->m_spellInfo->CalculateSimpleValue(effIdx), TRIGGERED_OLD_TRIGGERED);
     }
 };
 
@@ -1359,6 +1298,15 @@ struct PutricideGrowStacker : public AuraScript
     }
 };
 
+// 70347 - Grow
+struct PutricideGrow : public AuraScript
+{
+    void OnHolderInit(SpellAuraHolder* holder, WorldObject* /*caster*/) const override
+    {
+        holder->PresetAuraStacks(7);
+    }
+};
+
 // 71278/71279 and difficulty variants - Choking Gas
 struct PutricideChokingGasFilter : public SpellScript
 {
@@ -1493,27 +1441,8 @@ struct OozeFlood : public SpellScript
     void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
     {
         Unit* target = spell->GetUnitTarget();
-
-        // Set the target manually to the closest stalker on the room floor.
-        // A generic closest-entry lookup can select another upper tap and
-        // render the ooze flood suspended in mid-air.
-        Creature* pFloorStalker = nullptr;
-        float fNearDistance = 20.0f;
-        CreatureList lTargetsInRange;
-        GetCreatureListWithEntryInGrid(lTargetsInRange, target, target->GetEntry(), 20.0f);
-
-        for (CreatureList::const_iterator itr = lTargetsInRange.begin(); itr != lTargetsInRange.end(); ++itr)
-        {
-            float fDistance = target->GetDistance(*itr);
-            if ((*itr)->GetPositionZ() < 365.0f && fDistance < fNearDistance)
-            {
-                pFloorStalker = *itr;
-                fNearDistance = fDistance;
-            }
-        }
-
-        if (pFloorStalker)
-            target->CastSpell(pFloorStalker, spell->m_spellInfo->CalculateSimpleValue(effIdx), TRIGGERED_OLD_TRIGGERED);
+        if (target && effIdx == EFFECT_INDEX_0)
+            target->CastSpell(nullptr, spell->m_spellInfo->CalculateSimpleValue(effIdx), TRIGGERED_OLD_TRIGGERED);
     }
 };
 
@@ -1555,6 +1484,8 @@ void AddSC_boss_professor_putricide()
     pNewScript->RegisterSelf();
 
     RegisterSpellScript<OozeFloodTrigger>("spell_ooze_flood_trigger");
+    RegisterSpellScript<PutricideSlimePuddleSelector>("spell_putricide_slime_puddle_selector");
+    RegisterSpellScript<PutricideSlimePuddleTarget>("spell_putricide_slime_puddle_target");
     RegisterSpellScript<UnstableExperiment>("spell_unstable_experiment");
     RegisterSpellScript<VolatileExperiment>("spell_volatile_experiment");
     RegisterSpellScript<PutricideOozeChannel>("spell_putricide_ooze_channel");
@@ -1571,6 +1502,7 @@ void AddSC_boss_professor_putricide()
     RegisterSpellScript<PutricideMutatedPlague>("spell_putricide_mutated_plague");
     RegisterSpellScript<PutricideOozeTankProtection>("spell_putricide_ooze_tank_protection");
     RegisterSpellScript<PutricideGrowStacker>("spell_putricide_grow_stacker");
+    RegisterSpellScript<PutricideGrow>("spell_putricide_grow");
     RegisterSpellScript<PutricideChokingGasFilter>("spell_putricide_choking_gas_filter");
     RegisterSpellScript<PutricideSlimePuddle>("spell_putricide_slime_puddle");
     RegisterSpellScript<EatOoze>("spell_eat_ooze");

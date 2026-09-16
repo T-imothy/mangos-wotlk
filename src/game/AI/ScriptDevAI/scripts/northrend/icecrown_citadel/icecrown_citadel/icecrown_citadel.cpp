@@ -131,10 +131,10 @@ enum
     SPELL_LK_HARVEST_TELEPORT_H     = 73655,
     SPELL_LK_FURY_NO_REZ            = 72351,
 
-    POINT_GAUNTLET_LAND             = 1,
-
-    // Putricide encounter auras which can persist if the world server stops
-    // during an attempt.
+    // Putricide player auras which can be persisted if the world server is
+    // stopped during an attempt. Clear them after the player has entered a
+    // restarted instance rather than casting encounter cleanup while the
+    // boss AI and map are still being constructed.
     SPELL_PUTRICIDE_UNBOUND_10N      = 70911,
     SPELL_PUTRICIDE_UNBOUND_25N      = 72854,
     SPELL_PUTRICIDE_UNBOUND_10H      = 72855,
@@ -148,6 +148,8 @@ enum
     SPELL_PUTRICIDE_PROTECTION       = 70955,
     SPELL_PUTRICIDE_OOZE_VARIABLE    = 74118,
     SPELL_PUTRICIDE_GAS_VARIABLE     = 74119,
+
+    POINT_GAUNTLET_LAND             = 1,
 };
 
 namespace
@@ -204,11 +206,11 @@ static const DialogueEntry aCitadelDialogue[] =
 instance_icecrown_citadel::instance_icecrown_citadel(Map* pMap) : ScriptedInstance(pMap), DialogueHelper(aCitadelDialogue),
     m_uiTeam(0),
     m_uiPutricideValveTimer(0),
+    m_lightsHammerDamnedKills(0),
     m_uiGunshipResetTimer(0),
     m_uiGunshipVictoryTeleportTimer(0),
     m_uiColdflameJetsState(NOT_STARTED),
     m_uiSindragosaGauntletState(NOT_STARTED),
-    m_lightsHammerDamnedKills(0),
     m_bHasMarrowgarIntroYelled(false),
     m_bHasDeathwhisperIntroYelled(false),
     m_bHasRimefangLanded(false),
@@ -222,13 +224,13 @@ void instance_icecrown_citadel::Initialize()
 {
     InitializeDialogueHelper(this);
     memset(&m_auiEncounter, 0, sizeof(m_auiEncounter));
+    m_lightsHammerDamnedKills = 0;
+    m_lightsHammerDamnedGuids.clear();
     m_uiGunshipResetTimer = 0;
     m_uiGunshipVictoryTeleportTimer = 0;
     m_uiColdflameJetsState = NOT_STARTED;
     m_uiSindragosaGauntletState = NOT_STARTED;
     m_bGunshipReloadPending = false;
-    m_lightsHammerDamnedKills = 0;
-    m_lightsHammerDamnedGuids.clear();
     m_sRimefangTrashGuids.clear();
     m_sSpinestalkerTrashGuids.clear();
 
@@ -911,6 +913,7 @@ void instance_icecrown_citadel::OnCreatureCreate(Creature* pCreature)
         case NPC_DARKFALLEN_ARCHMAGE:
         case NPC_DARKFALLEN_BLOOD_KNIGHT:
         case NPC_DARKFALLEN_ADVISOR:
+        case NPC_DARKFALLEN_TACTICIAN:
             if (pCreature->GetPositionZ() < 352.0f)
                 m_sDarkfallenCreaturesLowerGuids.insert(pCreature->GetObjectGuid());
             else if (pCreature->GetPositionZ() < 400.0f)
@@ -1207,6 +1210,7 @@ void instance_icecrown_citadel::OnCreatureEnterCombat(Creature* pCreature)
         case NPC_DARKFALLEN_ARCHMAGE:
         case NPC_DARKFALLEN_BLOOD_KNIGHT:
         case NPC_DARKFALLEN_ADVISOR:
+        case NPC_DARKFALLEN_TACTICIAN:
             // ToDo: cast SPELL_SIPHON_ESSENCE on combat
             return;
     }
@@ -1254,6 +1258,7 @@ void instance_icecrown_citadel::OnCreatureDeath(Creature* pCreature)
         case NPC_DARKFALLEN_ARCHMAGE:
         case NPC_DARKFALLEN_BLOOD_KNIGHT:
         case NPC_DARKFALLEN_ADVISOR:
+        case NPC_DARKFALLEN_TACTICIAN:
             // lower pack
             if (m_sDarkfallenCreaturesLowerGuids.find(pCreature->GetObjectGuid()) != m_sDarkfallenCreaturesLowerGuids.end())
             {
@@ -1293,9 +1298,9 @@ void instance_icecrown_citadel::OnCreatureDeath(Creature* pCreature)
             break;
         case NPC_SPIRE_FROSTWYRM:
             // The faction-filtered permanent wyrm on the opposite ramp is a
-            // separate trash spawn. Only the area-triggered arrival summon
+            // separate trash spawn. Only the StringId-managed arrival spawn
             // completes this saved event.
-            if (pCreature->IsTemporarySummon())
+            if (pCreature->HasStringId("ICC_SPIRE_FROSTWYRM"))
                 SetData(TYPE_SPIRE_FROSTWYRM, DONE);
             break;
         case NPC_SISTER_SVALNA:

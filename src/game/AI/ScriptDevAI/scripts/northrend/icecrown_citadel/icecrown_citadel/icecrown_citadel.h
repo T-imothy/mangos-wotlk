@@ -144,6 +144,7 @@ enum
     NPC_DARKFALLEN_ARCHMAGE         = 37664,
     NPC_DARKFALLEN_BLOOD_KNIGHT     = 37595,
     NPC_DARKFALLEN_ADVISOR          = 37571,
+    NPC_DARKFALLEN_TACTICIAN        = 37666,
     NPC_EMPOWERING_ORB_STALKER      = 36934,
 
     // achievement types
@@ -436,11 +437,11 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
 
         uint32 m_uiTeam;                                    // Team of first entered player, used on the Gunship event
         uint32 m_uiPutricideValveTimer;
+        uint8 m_lightsHammerDamnedKills;
         uint32 m_uiGunshipResetTimer;
         uint32 m_uiGunshipVictoryTeleportTimer;
         uint32 m_uiColdflameJetsState;
         uint32 m_uiSindragosaGauntletState;
-        uint8 m_lightsHammerDamnedKills;
 
         bool m_bHasMarrowgarIntroYelled;
         bool m_bHasDeathwhisperIntroYelled;

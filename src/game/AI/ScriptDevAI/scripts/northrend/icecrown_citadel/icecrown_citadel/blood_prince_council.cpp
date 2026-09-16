@@ -406,7 +406,8 @@ struct npc_blood_orb_controlAI : public Scripted_NoMovementAI
 
     ScriptedInstance* m_pInstance;
 
-    uint8 m_uiLastResult;
+    uint8 m_uiInvocationOrder[MAX_PRINCES];
+    uint8 m_uiInvocationStage;
     uint32 m_uiInvocationTimer;
     uint32 m_uiFinishTimer;
     bool m_bFinishingEncounter;
@@ -415,8 +416,22 @@ struct npc_blood_orb_controlAI : public Scripted_NoMovementAI
 
     void Reset() override
     {
-        m_uiLastResult = MAX_PRINCES;
-        m_uiInvocationTimer = 30000;
+        // Valanar is empowered when the council wakes. Retail chooses one of
+        // the two remaining princes next, then cycles through that three-prince
+        // order for the rest of the pull.
+        m_uiInvocationOrder[0] = 0;
+        if (urand(0, 1))
+        {
+            m_uiInvocationOrder[1] = 2;
+            m_uiInvocationOrder[2] = 1;
+        }
+        else
+        {
+            m_uiInvocationOrder[1] = 1;
+            m_uiInvocationOrder[2] = 2;
+        }
+        m_uiInvocationStage = 0;
+        m_uiInvocationTimer = 46500;
         m_uiFinishTimer = 0;
         m_bFinishingEncounter = false;
         m_bCompletionProcessed = false;
@@ -606,12 +621,12 @@ struct npc_blood_orb_controlAI : public Scripted_NoMovementAI
         if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
             return;
 
-        // every 30 seconds cast Invocation of Blood on random prince
+        // Every 46.5 seconds move Invocation of Blood to the next prince in the
+        // pull's fixed retail order.
         if (m_uiInvocationTimer < uiDiff)
         {
-            uint8 uiResult = urand(0, MAX_PRINCES - 1);
-            uiResult = uiResult == m_uiLastResult ? (uiResult + 1) % MAX_PRINCES : uiResult;
-            m_uiLastResult = uiResult;
+            m_uiInvocationStage = (m_uiInvocationStage + 1) % MAX_PRINCES;
+            uint8 const uiResult = m_uiInvocationOrder[m_uiInvocationStage];
 
             switch (uiResult)
             {
@@ -629,7 +644,7 @@ struct npc_blood_orb_controlAI : public Scripted_NoMovementAI
                     break;
             }
 
-            m_uiInvocationTimer = 47000;
+            m_uiInvocationTimer = 46500;
         }
         else
             m_uiInvocationTimer -= uiDiff;
@@ -712,7 +727,7 @@ struct blood_prince_council_baseAI : public ScriptedAI
             m_creature->SetHealth(pCaster->GetHealth());
             DoBroadcastText(m_iEmoteInvocationEntry, m_creature);
             DoBroadcastText(m_iSayInvocationEntry, m_creature);
-            m_uiEmpowermentTimer = 30000;
+            m_uiEmpowermentTimer = 46500;
         }
     }
 
@@ -746,7 +761,7 @@ struct blood_prince_council_baseAI : public ScriptedAI
                 m_creature->RemoveAurasDueToSpell(m_uiInvocationSpellEntry);
                 m_creature->SetHealth(1);
                 m_bIsSaidSpecial = false;
-                m_uiEmpowermentTimer = 00;
+                m_uiEmpowermentTimer = 0;
             }
             else
                 m_uiEmpowermentTimer -= uiDiff;

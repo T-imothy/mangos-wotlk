@@ -47,7 +47,7 @@ enum
     SPELL_PACT_OF_THE_DARKFALLEN    = 71336,            // triggers 71340
     SPELL_VAMPIRIC_BITE             = 71837,            // triggers 71726 and 70946
     SPELL_TWILIGHT_BLOODBOLT        = 71445,            // triggers 72313, 71446 and 71818
-    SPELL_DELIRIOUS_SLASH           = 72261,            // heroic only - triggers 71623 and 72264
+    SPELL_DELIRIOUS_SLASH           = 72261,            // triggers 71623 and 72264
     SPELL_PRESENCE_OF_DARKFALLEN    = 70994,            // heroic only - triggers 71958, 71959 and 71952
     SPELL_THIRST_QUENCHED           = 72154,            // related to quest 24756
 
@@ -395,17 +395,15 @@ struct boss_blood_queen_lanathelAI : public ScriptedAI
                 else
                     m_uiSwarmingShadowsTimer -= uiDiff;
 
-                // Heroic spells
-                if (m_pInstance && m_pInstance->IsHeroicDifficulty())
+                // Delirious Slash is used in every raid mode. The wrapper
+                // chooses its melee or ranged triggered variant.
+                if (m_uiDeliriousSlashTimer < uiDiff)
                 {
-                    if (m_uiDeliriousSlashTimer < uiDiff)
-                    {
-                        if (DoCastSpellIfCan(m_creature, SPELL_DELIRIOUS_SLASH) == CAST_OK)
-                            m_uiDeliriousSlashTimer = 15000;
-                    }
-                    else
-                        m_uiDeliriousSlashTimer -= uiDiff;
+                    if (DoCastSpellIfCan(m_creature, SPELL_DELIRIOUS_SLASH) == CAST_OK)
+                        m_uiDeliriousSlashTimer = urand(20000, 24000);
                 }
+                else
+                    m_uiDeliriousSlashTimer -= uiDiff;
 
                 DoMeleeAttackIfReady();
 

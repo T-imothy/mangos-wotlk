@@ -122,7 +122,7 @@ struct boss_rotfaceAI : public CombatAI
     boss_rotfaceAI(Creature* creature) : CombatAI(creature, ROTFACE_ACTION_MAX),
         m_instance(static_cast<instance_icecrown_citadel*>(creature->GetInstanceData()))
     {
-        AddCombatAction(ROTFACE_SLIME_SPRAY, 5000u);
+        AddCombatAction(ROTFACE_SLIME_SPRAY, 20000u);
         AddCombatAction(ROTFACE_MUTATED_INFECTION, 14000u);
         AddCombatAction(ROTFACE_INFECTION_ACCELERATE, 90000u);
         AddCombatAction(ROTFACE_VILE_GAS, 30000u);
@@ -225,7 +225,7 @@ struct boss_rotfaceAI : public CombatAI
         {
             case ROTFACE_SLIME_SPRAY:
                 if (DoCastSpellIfCan(m_creature, SPELL_SLIME_SPRAY_SUMMON) == CAST_OK)
-                    ResetCombatAction(action, urand(20000, 25000));
+                    ResetCombatAction(action, 20000u);
                 break;
             case ROTFACE_MUTATED_INFECTION:
             {

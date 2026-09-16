@@ -25,8 +25,8 @@ EndScriptData */
 #include "icecrown_citadel.h"
 #include "AI/ScriptDevAI/base/CombatAI.h"
 #include "AI/BaseAI/GameObjectAI.h"
-#include "Entities/Transports.h"
 #include "AI/ScriptDevAI/base/TimerAI.h"
+#include "Entities/Transports.h"
 
 /*#####
 ## go_icc_teleporter
@@ -373,7 +373,6 @@ bool AreaTrigger_at_rampart_skull(Player* player, AreaTriggerEntry const* areaTr
         if (frostwyrm->IsAlive())
             return false;
     }
-
     bool const validTrigger =
         ((areaTrigger->id == AT_RAMPART_ALLIANCE || areaTrigger->id == AT_RAMPART_ALLIANCE_2) && instance->GetPlayerTeam() == ALLIANCE) ||
         ((areaTrigger->id == AT_RAMPART_HORDE || areaTrigger->id == AT_RAMPART_HORDE_2) && instance->GetPlayerTeam() == HORDE);
@@ -736,6 +735,53 @@ struct RocketPackPeriodic : public AuraScript
     }
 };
 
+enum EmpoweredBloodSpells
+{
+    SPELL_EMPOWERED_BLOOD_PLAYER_AUX     = 70232,
+    SPELL_EMPOWERED_BLOOD_CONTROLLER_AUX = 70320,
+};
+
+// 70227 - Empowered Blood
+// The orb's primary aura carries the encounter duration and damage modifier;
+// its paired aura supplies the remaining retail stat modifiers.
+struct EmpoweredBlood : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (aura->GetEffIndex() != EFFECT_INDEX_0)
+            return;
+
+        Unit* target = aura->GetTarget();
+        if (apply)
+            target->CastSpell(target, SPELL_EMPOWERED_BLOOD_PLAYER_AUX, TRIGGERED_OLD_TRIGGERED);
+        else
+            target->RemoveAurasDueToSpell(SPELL_EMPOWERED_BLOOD_PLAYER_AUX);
+    }
+};
+
+// 70304 - Empowered Blood
+// The controller-delivered orb variant uses its own paired stat aura.
+struct EmpoweredBloodController : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (aura->GetEffIndex() != EFFECT_INDEX_0)
+            return;
+
+        Unit* target = aura->GetTarget();
+        if (apply)
+            target->CastSpell(target, SPELL_EMPOWERED_BLOOD_CONTROLLER_AUX, TRIGGERED_OLD_TRIGGERED);
+        else
+            target->RemoveAurasDueToSpell(SPELL_EMPOWERED_BLOOD_CONTROLLER_AUX);
+    }
+};
+
+// 70739, 70740 - Geist Alarm
+// The two trap gameobjects above the Plagueworks corridor call the same
+// retail event: a six-geist pipe pack is created, jumps down when the raid is
+// below it and immediately engages.  Keeping this on the alarm spells avoids
+// permanent duplicate creature spawns and lets the gameobject's normal
+// respawn control subsequent pulls.
 struct GeistAlarm : public SpellScript
 {
     void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
@@ -835,6 +881,11 @@ void AddSC_icecrown_citadel()
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
+    pNewScript->Name = "npc_icc_vengeful_fleshreaper";
+    pNewScript->GetAI = &GetNewAIInstance<npc_icc_vengeful_fleshreaperAI>;
+    pNewScript->RegisterSelf();
+
+    pNewScript = new Script;
     pNewScript->Name = "at_putricides_trap";
     pNewScript->pAreaTrigger = &AreaTrigger_at_putricides_trap;
     pNewScript->RegisterSelf();
@@ -845,16 +896,13 @@ void AddSC_icecrown_citadel()
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
-    pNewScript->Name = "npc_icc_vengeful_fleshreaper";
-    pNewScript->GetAI = &GetNewAIInstance<npc_icc_vengeful_fleshreaperAI>;
-    pNewScript->RegisterSelf();
-
-    pNewScript = new Script;
     pNewScript->Name = "go_lady_deathwhisper_elevator";
     pNewScript->GetGameObjectAI = &GetNewAIInstance<LadyDeathwhisperElevator>;
     pNewScript->RegisterSelf();
 
     RegisterSpellScript<RocketPack>("spell_rocket_pack");
     RegisterSpellScript<RocketPackPeriodic>("spell_rocket_pack_periodic");
+    RegisterSpellScript<EmpoweredBlood>("spell_icc_empowered_blood");
+    RegisterSpellScript<EmpoweredBloodController>("spell_icc_empowered_blood_controller");
     RegisterSpellScript<GeistAlarm>("spell_icc_geist_alarm");
 }
