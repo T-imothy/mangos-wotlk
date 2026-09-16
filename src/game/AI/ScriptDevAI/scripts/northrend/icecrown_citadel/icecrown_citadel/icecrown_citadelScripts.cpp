@@ -671,6 +671,15 @@ struct LadyDeathwhisperElevator : public GameObjectAI, public TimerManager
 {
     LadyDeathwhisperElevator(GameObject* go) : GameObjectAI(go)
     {
+        // SetGoState() resumes an ElevatorTransport. Keep this lift at its
+        // initial stop until Deathwhisper's DONE transition explicitly starts
+        // it, matching the encounter progression gate used by the client.
+        if (InstanceData* instance = m_go->GetMap()->GetInstanceData())
+        {
+            if (instance->GetData(TYPE_LADY_DEATHWHISPER) != DONE)
+                static_cast<ElevatorTransport*>(m_go)->StopMovement();
+        }
+
         AddCustomAction(1, true, [&]()
         {
             HandleStateChange();
@@ -679,11 +688,23 @@ struct LadyDeathwhisperElevator : public GameObjectAI, public TimerManager
 
     void JustReachedStopPoint() override
     {
-        ResetTimer(1, 5000);
+        // The lift is progression beyond Deathwhisper. Do not let its
+        // automatic shuttle loop start before her encounter is complete.
+        if (InstanceData* instance = m_go->GetMap()->GetInstanceData())
+        {
+            if (instance->GetData(TYPE_LADY_DEATHWHISPER) == DONE)
+                ResetTimer(1, 5000);
+        }
     }
 
     void HandleStateChange()
     {
+        if (InstanceData* instance = m_go->GetMap()->GetInstanceData())
+        {
+            if (instance->GetData(TYPE_LADY_DEATHWHISPER) != DONE)
+                return;
+        }
+
         m_go->SetGoState(m_go->GetGoState() == GO_STATE_READY ? GO_STATE_ACTIVE : GO_STATE_READY);
     }
 
@@ -698,7 +719,10 @@ struct RocketPack : public AuraScript
     void OnApply(Aura* aura, bool apply) const override
     {
         if (apply)
-            aura->GetTarget()->CastSpell(nullptr, 68721, TRIGGERED_NONE);
+            // 68721 is the movement/damage aura triggered by the pack's
+            // on-use spell.  It is not a second player-initiated cast and
+            // must not repeat normal combat/casting-state validation.
+            aura->GetTarget()->CastSpell(nullptr, 68721, TRIGGERED_OLD_TRIGGERED);
     }
 };
 
@@ -709,6 +733,76 @@ struct RocketPackPeriodic : public AuraScript
         Unit* target = aura->GetTarget();
         if (!target->IsFalling()) // remove aura after landing
             target->RemoveAurasDueToSpell(aura->GetId());
+    }
+};
+
+struct GeistAlarm : public SpellScript
+{
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        if (effIdx != EFFECT_INDEX_2)
+            return;
+
+        WorldObject* source = spell->GetCastingObject();
+        if (!source || !source->GetMap() || source->GetMapId() != 631)
+            return;
+
+        Player* target = nullptr;
+        float nearestDistance = 120.0f;
+        Map::PlayerList const& players = source->GetMap()->GetPlayers();
+        for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
+        {
+            Player* player = itr->getSource();
+            if (!player || !player->IsAlive() || player->IsGameMaster())
+                continue;
+
+            float distance = source->GetDistance(player);
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                target = player;
+            }
+        }
+
+        if (!target)
+            return;
+
+        static uint32 const NPC_VENGEFUL_FLESHREAPER = 37038;
+        static float const spawnX = 4356.77f;
+        static float const spawnY = 2971.90f;
+        static float const spawnZ = 360.52f;
+        bool jumpFromPipe = nearestDistance > 20.0f;
+
+        Creature* leader = source->SummonCreature(NPC_VENGEFUL_FLESHREAPER,
+            spawnX, spawnY, spawnZ, M_PI_F / 2.0f,
+            TEMPSPAWN_TIMED_OOC_OR_DEAD_DESPAWN, 30 * MINUTE * IN_MILLISECONDS);
+        if (!leader)
+            return;
+
+        leader->SetInCombatWith(target);
+        leader->AddThreat(target, 1.0f);
+        leader->AI()->AttackStart(target);
+        if (jumpFromPipe)
+            leader->GetMotionMaster()->MoveJump(spawnX, spawnY + 55.0f, spawnZ, 20.0f, 6.0f);
+
+        for (uint8 i = 0; i < 5; ++i)
+        {
+            float angle = frand(0.0f, 2.0f * M_PI_F);
+            float distance = frand(2.0f, 6.0f);
+            float x = spawnX + std::cos(angle) * distance;
+            float y = spawnY + std::sin(angle) * distance;
+
+            if (Creature* geist = leader->SummonCreature(NPC_VENGEFUL_FLESHREAPER,
+                    x, y, spawnZ, angle, TEMPSPAWN_TIMED_OOC_OR_DEAD_DESPAWN,
+                    30 * MINUTE * IN_MILLISECONDS))
+            {
+                geist->SetInCombatWith(target);
+                geist->AddThreat(target, 1.0f);
+                geist->AI()->AttackStart(target);
+                if (jumpFromPipe)
+                    geist->GetMotionMaster()->MoveJump(x, y + 55.0f, spawnZ, 20.0f, 6.0f);
+            }
+        }
     }
 };
 
@@ -762,4 +856,5 @@ void AddSC_icecrown_citadel()
 
     RegisterSpellScript<RocketPack>("spell_rocket_pack");
     RegisterSpellScript<RocketPackPeriodic>("spell_rocket_pack_periodic");
+    RegisterSpellScript<GeistAlarm>("spell_icc_geist_alarm");
 }

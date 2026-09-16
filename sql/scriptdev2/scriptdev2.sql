@@ -1042,6 +1042,7 @@ UPDATE creature_template SET ScriptName='boss_lord_marrowgar' WHERE entry=36612;
 UPDATE creature_template SET ScriptName='npc_bone_spike' WHERE entry IN (36619,38711,38712);
 UPDATE creature_template SET ScriptName='boss_lady_deathwhisper' WHERE entry=36855;
 UPDATE creature_template SET ScriptName='boss_deathbringer_saurfang' WHERE entry=37813;
+UPDATE creature_template SET ScriptName='npc_saurfang_intro_leader' WHERE entry IN (37187,37200);
 UPDATE creature_template SET ScriptName='npc_queen_lanathel_intro' WHERE entry=38004;
 UPDATE creature_template SET ScriptName='npc_blood_orb_control' WHERE entry=38008;
 UPDATE creature_template SET ScriptName='npc_ball_of_flame' WHERE entry IN (38332,38451);
@@ -1062,6 +1063,17 @@ UPDATE creature_template SET ScriptName='boss_rotface' WHERE entry=36627;
 UPDATE creature_template SET ScriptName='mob_little_ooze' WHERE entry=36897;
 UPDATE creature_template SET ScriptName='mob_big_ooze' WHERE entry=36899;
 UPDATE creature_template SET ScriptName='boss_valithria_dreamwalker' WHERE entry=36789;
+UPDATE creature_template SET ScriptName='npc_blazing_skeleton_icc' WHERE entry=36791;
+UPDATE creature_template SET ScriptName='npc_suppresser_icc' WHERE entry=37863;
+UPDATE creature_template SET ScriptName='npc_risen_archmage_icc' WHERE entry=37868;
+UPDATE creature_template SET ScriptName='npc_gluttonous_abomination_icc' WHERE entry=37886;
+UPDATE creature_template SET ScriptName='npc_valithria_rot_worm' WHERE entry=37907;
+UPDATE creature_template SET ScriptName='npc_valithria_column_of_frost' WHERE entry=37918;
+UPDATE creature_template SET ScriptName='npc_blistering_zombie_icc' WHERE entry=37934;
+UPDATE creature_template SET ScriptName='npc_valithria_portal' WHERE entry IN (37945,38430);
+UPDATE creature_template SET ScriptName='npc_valithria_portal_preeffect' WHERE entry IN (38186,38429);
+UPDATE creature_template SET ScriptName='npc_valithria_cloud' WHERE entry IN (37985,38421);
+UPDATE creature_template SET ScriptName='npc_valithria_mana_void' WHERE entry=38068;
 UPDATE creature_template SET ScriptName='boss_professor_putricide' WHERE entry=36678;
 UPDATE creature_template SET ScriptName='npc_putricides_trap' WHERE entry=38879;
 UPDATE creature_template SET ScriptName='npc_volatile_ooze_icc' WHERE entry=37697;
@@ -1071,6 +1083,10 @@ UPDATE creature_template SET ScriptName='npc_choking_gas_bomb' WHERE entry=38159
 UPDATE creature_template SET ScriptName='boss_the_lich_king_icc' WHERE entry=36597;
 UPDATE creature_template SET ScriptName='npc_saurfang_gunship' WHERE entry=36939;
 UPDATE creature_template SET ScriptName='npc_muradin_gunship' WHERE entry=36948;
+UPDATE creature_template SET ScriptName='npc_gunship' WHERE entry IN (37215,37540);
+UPDATE creature_template SET ScriptName='npc_gunship_cannon' WHERE entry IN (36838,36839);
+UPDATE creature_template SET ScriptName='npc_gunship_soldier' WHERE entry IN (36950,36957,36960,36961,36968,36969,36978,36982,37116,37117);
+UPDATE creature_template SET ScriptName='npc_zafod_boombox' WHERE entry=37184;
 UPDATE gameobject_template SET ScriptName='go_icc_teleporter' WHERE entry IN (202235,202242,202243,202244,202245,202246);
 INSERT INTO scripted_event_id VALUES
 (23426,'event_gameobject_citadel_valve'),
