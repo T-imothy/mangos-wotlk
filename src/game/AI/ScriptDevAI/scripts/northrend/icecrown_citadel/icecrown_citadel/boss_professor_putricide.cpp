@@ -790,15 +790,20 @@ struct npc_putricide_oozeAI : public CombatAI
 
     void StartFixation(Unit* target)
     {
-        if (!target)
+        if (!target || !target->IsPlayer() ||
+            !target->GetSpellAuraHolder(GetPutricideDifficultySpellId(m_creature, m_channelSpellId),
+                m_creature->GetObjectGuid()))
             return;
 
         m_targetGuid = target->GetObjectGuid();
+        m_creature->AttackStop();
         m_creature->DeleteThreatList();
         SetReactState(REACT_AGGRESSIVE);
         SetCombatMovement(true);
-        m_creature->FixateTarget(target);
         AttackStart(target);
+        // AttackStart establishes the threat reference required by FixateTarget.
+        m_creature->FixateTarget(target);
+        ResetTimer(PUTRICIDE_ADD_ACTION_TARGET, 1s);
     }
 
     void ResetFixation(uint32 delay = 1000)
@@ -900,14 +905,50 @@ struct npc_putricide_oozeAI : public CombatAI
 
     void SelectTarget()
     {
+        if (m_targetGuid)
+        {
+            Unit* target = m_creature->GetMap()->GetUnit(m_targetGuid);
+            if (target && target->IsAlive() &&
+                target->GetSpellAuraHolder(GetPutricideDifficultySpellId(m_creature, m_channelSpellId),
+                    m_creature->GetObjectGuid()))
+            {
+                ResetTimer(PUTRICIDE_ADD_ACTION_TARGET, 1s);
+                return;
+            }
+
+            // A stored GUID alone does not mean the channel still holds its
+            // target. Resume selection when the fixation aura is gone.
+            ResetFixation();
+            return;
+        }
+
         if (m_creature->HasAura(SPELL_TEAR_GAS_CREATURE))
         {
             ResetTimer(PUTRICIDE_ADD_ACTION_TARGET, 1s);
             return;
         }
 
+        // Channeled spells occupy this slot during their initial cast time too.
+        // Wait for that cast to finish before deciding it has no fixation target.
+        if (Spell* channel = m_creature->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+            if (channel->m_spellInfo->Id == m_channelSpellId ||
+                channel->m_spellInfo->Id == GetPutricideDifficultySpellId(m_creature, m_channelSpellId))
+            {
+                if (channel->getState() != SPELL_STATE_CHANNELING)
+                {
+                    ResetTimer(PUTRICIDE_ADD_ACTION_TARGET, 1s);
+                    return;
+                }
+
+                // The cast finished without applying a fixation aura.
+                m_creature->FinishSpell(CURRENT_CHANNELED_SPELL);
+            }
+
         if (DoCastSpellIfCan(nullptr, m_channelSpellId) == CAST_OK)
+        {
+            ResetTimer(PUTRICIDE_ADD_ACTION_TARGET, 1s);
             return;
+        }
 
         ResetTimer(PUTRICIDE_ADD_ACTION_TARGET, 1s);
     }
@@ -938,6 +979,26 @@ struct PutricideOozeChannel : public SpellScript, public AuraScript
         spell->SetMaxAffectedTargets(1);
     }
 
+    SpellCastResult OnCheckCast(Spell* spell, bool /*strict*/) const override
+    {
+        Unit* caster = spell->GetCaster();
+        if (!caster)
+            return SPELL_FAILED_BAD_TARGETS;
+
+        // Reject an empty target search before a visible cast starts. The AI
+        // can retry silently while players retain their protection auras;
+        // normal spell targeting still chooses the eventual fixation target.
+        for (auto& playerRef : caster->GetMap()->GetPlayers())
+        {
+            Player* player = playerRef.getSource();
+            if (player && caster->CanAttackSpell(player, spell->m_spellInfo, true) &&
+                spell->CheckTarget(player, EFFECT_INDEX_0, false, false))
+                return SPELL_CAST_OK;
+        }
+
+        return SPELL_FAILED_BAD_TARGETS;
+    }
+
     bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex /*effIdx*/) const override
     {
         Unit* caster = spell->GetCaster();
@@ -951,11 +1012,15 @@ struct PutricideOozeChannel : public SpellScript, public AuraScript
         return !target->HasAuraOfDifficulty(protectionSpellId);
     }
 
-    void OnHit(Spell* spell, SpellMissInfo missInfo) const override
+    void OnAfterHit(Spell* spell) const override
     {
         Unit* caster = spell->GetCaster();
         Unit* target = spell->GetUnitTarget();
-        if (missInfo != SPELL_MISS_NONE || !caster || !target || !caster->AI())
+        // OnHit is conditional on damage/healing/proc flags in CMaNGOS.
+        // AfterHit runs after effect processing even when those flags are zero.
+        // Only an aura actually applied by this ooze can start its pursuit.
+        if (!caster || !target || !target->IsPlayer() || !caster->AI() ||
+            !target->GetSpellAuraHolder(spell->m_spellInfo->Id, caster->GetObjectGuid()))
             return;
 
         caster->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, target, caster);
@@ -1046,6 +1111,9 @@ struct PutricideMutatedTransformation : public SpellScript
         summon->CastSpell(nullptr, SPELL_POWER_DRAIN, TRIGGERED_OLD_TRIGGERED);
         summon->CastSpell(nullptr, SPELL_TRANSFORMATION_DAMAGE, TRIGGERED_OLD_TRIGGERED);
         caster->CastSpell(summon, SPELL_TRANSFORMATION_NAME, TRIGGERED_OLD_TRIGGERED);
+
+        // Both raid sizes start empty and gain energy by eating puddles.
+        summon->SetPower(POWER_ENERGY, 0);
     }
 };
 
@@ -1303,7 +1371,10 @@ struct PutricideGrow : public AuraScript
 {
     void OnHolderInit(SpellAuraHolder* holder, WorldObject* /*caster*/) const override
     {
-        holder->PresetAuraStacks(7);
+        // Only the first application starts at seven stacks. Periodic Grow
+        // casts must add the default single stack to the existing aura.
+        if (!holder->GetTarget()->HasAura(holder->GetId()))
+            holder->PresetAuraStacks(7);
     }
 };
 
