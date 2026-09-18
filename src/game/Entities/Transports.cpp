@@ -649,8 +649,9 @@ void Transport::Update(const uint32 diff)
             m_currentFrame->Spline->evaluate_percent(m_currentFrame->Index, t, pos);
             m_currentFrame->Spline->evaluate_derivative(m_currentFrame->Index, t, dir);
             float const orientation = atan2(dir.y, dir.x) + M_PI;
-            uint32 const partitionId = sMapMgr.GetContinentInstanceId(GetMapId(), pos.x, pos.y);
-            if (partitionId != GetInstanceId())
+            uint32 const partitionId = GetMapId() <= 1
+                ? sMapMgr.GetContinentInstanceId(GetMapId(), pos.x, pos.y) : 0;
+            if (MaNGOS::TransportNeedsPartitionTransfer(GetMapId(), GetInstanceId(), partitionId))
             {
                 TeleportTransport(GetMapId(), pos.x, pos.y, pos.z, orientation);
                 return;

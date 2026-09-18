@@ -26,6 +26,7 @@ EndScriptData */
 #include "Spells/Scripts/SpellScript.h"
 #include "Spells/SpellAuras.h"
 #include "Entities/Transports.h"
+#include "Entities/Vehicle.h"
 #include "Movement/MoveSplineInit.h"
 
 enum
@@ -1205,9 +1206,18 @@ struct spell_gunship_below_zero : public SpellScript
             return;
 
         // Below Zero's DBC targeting determines which hostile cannons are hit.
-        // The script supplies only the original per-hit vehicle behavior.
+        // Preserve the client spell, then explicitly eject occupied seats. The
+        // generic Eject All Passengers spell is not reliable for cannons that
+        // are passengers of a moving gunship transport.
         target->SetPower(target->GetPowerType(), 0);
         target->CastSpell(target, SPELL_EJECT_ALL_PASSENGERS, TRIGGERED_OLD_TRIGGERED);
+
+        if (VehicleInfo* vehicle = target->GetVehicleInfo())
+        {
+            for (uint8 seat = 0; seat < MAX_VEHICLE_SEAT; ++seat)
+                if (Unit* passenger = vehicle->GetPassenger(seat))
+                    passenger->ExitVehicle();
+        }
     }
 };
 

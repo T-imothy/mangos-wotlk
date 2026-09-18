@@ -29,5 +29,25 @@ int main()
         if (c.map == 631 && (c.map != c.destination || c.instance != destination))
             return EXIT_FAILURE; // must never enter CreateMap with a transport for this route
     }
+
+    struct MovementCase { unsigned map, instance, partition; bool transfer; };
+    MovementCase const movementCases[] = {
+        {0, 2, 3, true},
+        {1, 5, 5, false},
+        {0, 2, 0, true},
+        {672, 42, 0, false}, // ICC Skybreaker: never re-teleport passengers per movement tick
+        {673, 42, 0, false}, // ICC Orgrim's Hammer: same requirement
+        {631, 42, 0, false},
+        {609, 67, 0, false},
+        {571, 0, 0, false},
+    };
+    for (auto const& c : movementCases)
+    {
+        if (MaNGOS::TransportNeedsPartitionTransfer(c.map, c.instance, c.partition) != c.transfer)
+        {
+            std::cerr << "Transport movement partition routing failed for map " << c.map << '\n';
+            return EXIT_FAILURE;
+        }
+    }
     std::cout << "ICC ownership, phased maps and continent transport routing passed\n";
 }
