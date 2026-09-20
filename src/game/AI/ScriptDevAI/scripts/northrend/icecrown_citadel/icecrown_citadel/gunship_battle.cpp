@@ -22,6 +22,7 @@ SDCategory: Icecrown Citadel
 EndScriptData */
 
 #include "AI/ScriptDevAI/include/sc_common.h"
+#include "AI/BaseAI/NullCreatureAI.h"
 #include "icecrown_citadel.h"
 #include "Spells/Scripts/SpellScript.h"
 #include "Spells/SpellAuras.h"
@@ -180,8 +181,63 @@ static GunshipPosition const sSkybreakerExit   = {-17.55738f, -0.090421f, 21.183
 static GunshipPosition const sOrgrimsPortal    = {47.550990f, -0.101778f, 37.61111f, 0.0f};
 static GunshipPosition const sOrgrimsExit      = {7.461699f, 0.158853f, 35.72989f, 0.0f};
 
-static Player* SelectGunshipPlayer(Creature* source, bool sameTransport)
+static GenericTransport* GetGunshipCarrier(WorldObject const* object)
 {
+    if (!object)
+        return nullptr;
+    while (object->IsBoarded())
+    {
+        object = object->GetTransportInfo()->GetTransport();
+        if (!object)
+            return nullptr;
+    }
+    GenericTransport* transport = object->GetTransport();
+    if (!transport)
+        return nullptr;
+    switch (transport->GetEntry())
+    {
+        case GO_THE_SKYBREAKER_A:
+        case GO_THE_SKYBREAKER_H:
+        case GO_ORGRIMS_HAMMER_A:
+        case GO_ORGRIMS_HAMMER_H:
+            return transport;
+        default:
+            return nullptr;
+    }
+}
+
+static bool IsGunshipMeleeTarget(Creature* source, Unit* target)
+{
+    if (!target || !target->IsAlive() || target->IsVehicle() || target->IsBoarded())
+        return false;
+    if (target->IsPlayer() && static_cast<Player*>(target)->IsGameMaster())
+        return false;
+    GenericTransport* transport = GetGunshipCarrier(source);
+    return transport && transport == GetGunshipCarrier(target) && source->CanAttack(target);
+}
+
+static void RemoveInvalidGunshipMeleeTargets(Creature* source)
+{
+    if (!GetGunshipCarrier(source))
+        return;
+    ThreatList const targets = source->getThreatManager().getThreatList();
+    for (HostileReference* reference : targets)
+        if (Unit* target = reference->getTarget())
+            if (!IsGunshipMeleeTarget(source, target))
+                source->getThreatManager().modifyThreatPercent(target, -101);
+    if (Unit* target = source->GetVictim())
+        if (!IsGunshipMeleeTarget(source, target))
+        {
+            source->AttackStop();
+            source->GetMotionMaster()->MoveIdle();
+        }
+}
+
+static Player* SelectGunshipPlayer(Creature* source, bool sameTransport, SpellEntry const* spellInfo = nullptr)
+{
+    GenericTransport* sourceTransport = GetGunshipCarrier(source);
+    if (!sourceTransport)
+        return nullptr;
     Player* selected = nullptr;
     for (auto& playerRef : source->GetMap()->GetPlayers())
     {
@@ -189,26 +245,12 @@ static Player* SelectGunshipPlayer(Creature* source, bool sameTransport)
         if (!player || !player->IsAlive() || player->IsGameMaster())
             continue;
 
-        bool sourceIsAlliance = source->GetEntry() == NPC_GUNSHIP_MURADIN ||
-            source->GetEntry() == NPC_SKYBREAKER_RIFLEMAN ||
-            source->GetEntry() == NPC_SKYBREAKER_MORTAR_SOLDIER ||
-            source->GetEntry() == NPC_SKYBREAKER_MARINE ||
-            source->GetEntry() == NPC_SKYBREAKER_SERGEANT ||
-            source->GetEntry() == NPC_SKYBREAKER_SORCERER;
-        bool onSourceTransport = source->GetTransport() &&
-            player->GetTransport() == source->GetTransport();
-
-        // Rocket Pack landings can update the deck aura before the player's
-        // GenericTransport pointer is refreshed. The original encounter uses
-        // these two deck auras for target eligibility, so accept either signal
-        // instead of letting the enemy commander drop combat after a landing.
-        if (!onSourceTransport)
-            onSourceTransport = player->HasAura(sourceIsAlliance ?
-                SPELL_SKYBREAKER_DECK : SPELL_ORGRIMS_HAMMER_DECK);
-
-        bool onAnyGunship = player->GetTransport() ||
-            player->HasAura(SPELL_SKYBREAKER_DECK) || player->HasAura(SPELL_ORGRIMS_HAMMER_DECK);
-        if (!onAnyGunship || onSourceTransport != sameTransport)
+        GenericTransport* playerTransport = GetGunshipCarrier(player);
+        if (!playerTransport || (sourceTransport == playerTransport) != sameTransport)
+            continue;
+        if (sameTransport && !IsGunshipMeleeTarget(source, player))
+            continue;
+        if (spellInfo && !source->CanAttackSpell(player, spellInfo))
             continue;
         if (!selected || source->GetDistance(player) < source->GetDistance(selected))
             selected = player;
@@ -375,15 +417,12 @@ struct npc_gunshipAI : public Scripted_NoMovementAI
     }
 };
 
-struct npc_gunship_cannonAI : public ScriptedAI
+struct npc_gunship_cannonAI : public NullCreatureAI
 {
-    npc_gunship_cannonAI(Creature* creature) : ScriptedAI(creature)
+    npc_gunship_cannonAI(Creature* creature) : NullCreatureAI(creature)
     {
         SetReactState(REACT_PASSIVE);
-        Reset();
     }
-
-    void Reset() override { }
 
     void OnPassengerRide(Unit* passenger, bool boarded, uint8 /*seat*/) override
     {
@@ -644,14 +683,28 @@ struct npc_gunship_captainAI : public ScriptedAI
 
     void Reset() override { ScriptedAI::Reset(); }
 
+    void MoveInLineOfSight(Unit* who) override
+    {
+        if (IsGunshipMeleeTarget(m_creature, who))
+            ScriptedAI::MoveInLineOfSight(who);
+    }
+
+    void AttackStart(Unit* who) override
+    {
+        if (IsGunshipMeleeTarget(m_creature, who))
+            ScriptedAI::AttackStart(who);
+    }
+
     void DamageTaken(Unit* /*dealer*/, uint32& damage, DamageEffectType /*damageType*/, SpellEntry const* /*spellInfo*/) override
     {
         if (damage >= m_creature->GetHealth())
             damage = m_creature->GetHealth() - 1;
     }
 
-    void Aggro(Unit* /*who*/) override
+    void Aggro(Unit* who) override
     {
+        if (!IsGunshipMeleeTarget(m_creature, who))
+            return;
         DoBroadcastText(m_creature->GetEntry() == NPC_GUNSHIP_MURADIN ? SAY_MURADIN_AGGRO : SAY_SAURFANG_AGGRO, m_creature);
         DoCastSpellIfCan(m_creature, SPELL_CAPTAIN_BATTLE_FURY, CAST_TRIGGERED);
     }
@@ -664,6 +717,7 @@ struct npc_gunship_captainAI : public ScriptedAI
 
     void UpdateAI(uint32 diff) override
     {
+        RemoveInvalidGunshipMeleeTargets(m_creature);
         if (m_instance && m_instance->GetData(TYPE_GUNSHIP_BATTLE) == IN_PROGRESS &&
             m_instance->GetGunshipCaptain() == m_creature && !m_creature->GetVictim())
             if (Player* player = SelectGunshipPlayer(m_creature, true))
@@ -688,15 +742,17 @@ struct npc_gunship_soldierAI : public ScriptedAI
     {
         AddCustomAction(GUNSHIP_SOLDIER_SHOT, true, [this]()
         {
-            if (Player* target = SelectGunshipPlayer(m_creature, false))
-                DoCastSpellIfCan(target, m_creature->GetEntry() == NPC_SKYBREAKER_RIFLEMAN ? SPELL_SHOOT : SPELL_HURL_AXE);
+            uint32 spellId = m_creature->GetEntry() == NPC_SKYBREAKER_RIFLEMAN ? SPELL_SHOOT : SPELL_HURL_AXE;
+            if (Player* target = SelectGunshipPlayer(m_creature, false, sSpellTemplate.LookupEntry<SpellEntry>(spellId)))
+                DoCastSpellIfCan(target, spellId);
             ResetTimer(GUNSHIP_SOLDIER_SHOT, 3000, 5000);
         });
         AddCustomAction(GUNSHIP_SOLDIER_ARTILLERY, true, [this]()
         {
-            if (Player* target = SelectGunshipPlayer(m_creature, false))
-                DoCastSpellIfCan(target, m_creature->GetEntry() == NPC_SKYBREAKER_MORTAR_SOLDIER ?
-                    SPELL_ROCKET_ARTILLERY_A : SPELL_ROCKET_ARTILLERY_H, CAST_TRIGGERED);
+            uint32 spellId = m_creature->GetEntry() == NPC_SKYBREAKER_MORTAR_SOLDIER ?
+                SPELL_ROCKET_ARTILLERY_A : SPELL_ROCKET_ARTILLERY_H;
+            if (Player* target = SelectGunshipPlayer(m_creature, false, sSpellTemplate.LookupEntry<SpellEntry>(spellId)))
+                DoCastSpellIfCan(target, spellId, CAST_TRIGGERED);
             ResetTimer(GUNSHIP_SOLDIER_ARTILLERY, 9000);
         });
         AddCustomAction(GUNSHIP_SOLDIER_MAGE, true, [this]()
@@ -729,6 +785,18 @@ struct npc_gunship_soldierAI : public ScriptedAI
     uint8 m_experienceLevel;
     bool m_boarded;
     bool m_freezeMage;
+
+    void MoveInLineOfSight(Unit* who) override
+    {
+        if (IsGunshipMeleeTarget(m_creature, who))
+            ScriptedAI::MoveInLineOfSight(who);
+    }
+
+    void AttackStart(Unit* who) override
+    {
+        if (IsGunshipMeleeTarget(m_creature, who))
+            ScriptedAI::AttackStart(who);
+    }
 
     bool IsRanged() const
     {
@@ -803,6 +871,7 @@ struct npc_gunship_soldierAI : public ScriptedAI
             UpdateTimers(diff, m_creature->IsInCombat());
             return;
         }
+        RemoveInvalidGunshipMeleeTargets(m_creature);
         if (!m_creature->GetVictim())
             if (Player* player = SelectGunshipPlayer(m_creature, true))
                 AttackStart(player);
@@ -1072,7 +1141,7 @@ bool NpcSpellClick_npc_gunship_cannon(Player* player, Creature* cannon, uint32 /
 
     bool ownCannon = (player->GetTeam() == ALLIANCE && cannon->GetEntry() == NPC_ALLIANCE_GUNSHIP_CANNON) ||
         (player->GetTeam() == HORDE && cannon->GetEntry() == NPC_HORDE_GUNSHIP_CANNON);
-    return !ownCannon;
+    return !ownCannon || cannon->HasAura(SPELL_BELOW_ZERO);
 }
 
 void AddSC_gunship_battle()
