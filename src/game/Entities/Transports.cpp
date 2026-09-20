@@ -294,55 +294,25 @@ void Transport::DespawnPassengers()
     m_staticPassengers.clear();
 }
 
-void Transport::RemoveFromMap()
+void Transport::RemoveFromWorld()
 {
+    if (!IsInWorld())
+        return;
+
     Map* map = GetMap();
-
-    // Never delete a moving transport from underneath a player. Encounter
-    // scripts must relocate every player passenger before requesting removal.
-    for (auto& playerRef : map->GetPlayers())
-        if (Player* player = playerRef.getSource())
-            if (HasPassenger(player))
-            {
-                sLog.outError("Transport::RemoveFromMap: refusing to remove transport %u while player %s is aboard",
-                    GetEntry(), player->GetGuidStr().c_str());
-                return;
-            }
-
-    // Dynamic encounter passengers are not part of m_staticPassengers, so
-    // detach and remove them before deleting the ship.
     auto passengers = m_passengers;
     for (WorldObject* passenger : passengers)
     {
         RemovePassenger(passenger);
-        passenger->AddObjectToRemoveList();
+        if (passenger->GetTypeId() != TYPEID_PLAYER)
+            passenger->AddObjectToRemoveList();
     }
     m_staticPassengers.clear();
 
     RemoveModelFromMap();
     UpdateForMap(map, false);
     map->RemoveTransport(this);
-    CleanupsBeforeDelete();
-    ResetMap();
-    delete this;
-}
-
-void Transport::StartMovementNow()
-{
-    SetGoState(GO_STATE_ACTIVE);
-
-    if (!GetGOInfo()->moTransport.canBeStopped || !m_currentFrame->IsStopFrame())
-        return;
-
-    // SetGoState clears the manual stop flag, but the normal update still
-    // waits out the DBC stop-frame dwell time. Script-started encounters need
-    // to depart when their RP asks them to, not minutes later.
-    uint32 cycleStart = (m_pathProgress / GetPeriod()) * GetPeriod();
-    m_pathProgress = cycleStart + m_currentFrame->DepartureTime;
-    m_lastStopIndex = m_currentFrame->Index;
-    SetMoving(true);
-    SetUInt16Value(GAMEOBJECT_DYNAMIC, 0, 0);
-    SetUInt16Value(GAMEOBJECT_DYNAMIC, 1, m_pathProgress % GetPeriod());
+    GameObject::RemoveFromWorld();
 }
 
 bool Transport::IsCrossMapTransport() const

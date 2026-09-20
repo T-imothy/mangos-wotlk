@@ -22,6 +22,7 @@ SDCategory: Icecrown Citadel
 EndScriptData */
 
 #include "AI/ScriptDevAI/include/sc_common.h"
+#include "AI/BaseAI/NullCreatureAI.h"
 #include "icecrown_citadel.h"
 #include "Spells/Scripts/SpellScript.h"
 #include "Spells/SpellAuras.h"
@@ -94,13 +95,12 @@ enum
     SPELL_CANNON_BLAST_H             = 70172,
     SPELL_CANNON_OVERHEAT            = 69487,
     SPELL_EJECT_ALL_PASSENGERS       = 68576,
+    SPELL_SUPPRESS_WHISPERS          = 71248,
 
     NPC_ALLIANCE_GUNSHIP_CANNON      = 36838,
     NPC_HORDE_GUNSHIP_CANNON         = 36839,
 
-    // Timings match the 3.3.5 encounter: first boarders at 12 sec,
-    // subsequent waves each minute, and first freeze mage no sooner
-    // than one minute after combat begins.
+    // Encounter scheduling; the first freeze also requires the hull breakpoint.
     TIMER_FIRST_BOARDING            = 12000,
     TIMER_BOARDING_WAVE             = 60000,
     TIMER_FIRST_FREEZE_MAGE         = 45000,
@@ -181,8 +181,63 @@ static GunshipPosition const sSkybreakerExit   = {-17.55738f, -0.090421f, 21.183
 static GunshipPosition const sOrgrimsPortal    = {47.550990f, -0.101778f, 37.61111f, 0.0f};
 static GunshipPosition const sOrgrimsExit      = {7.461699f, 0.158853f, 35.72989f, 0.0f};
 
-static Player* SelectGunshipPlayer(Creature* source, bool sameTransport)
+static GenericTransport* GetGunshipCarrier(WorldObject const* object)
 {
+    if (!object)
+        return nullptr;
+    while (object->IsBoarded())
+    {
+        object = object->GetTransportInfo()->GetTransport();
+        if (!object)
+            return nullptr;
+    }
+    GenericTransport* transport = object->GetTransport();
+    if (!transport)
+        return nullptr;
+    switch (transport->GetEntry())
+    {
+        case GO_THE_SKYBREAKER_A:
+        case GO_THE_SKYBREAKER_H:
+        case GO_ORGRIMS_HAMMER_A:
+        case GO_ORGRIMS_HAMMER_H:
+            return transport;
+        default:
+            return nullptr;
+    }
+}
+
+static bool IsGunshipMeleeTarget(Creature* source, Unit* target)
+{
+    if (!target || !target->IsAlive() || target->IsVehicle() || target->IsBoarded())
+        return false;
+    if (target->IsPlayer() && static_cast<Player*>(target)->IsGameMaster())
+        return false;
+    GenericTransport* transport = GetGunshipCarrier(source);
+    return transport && transport == GetGunshipCarrier(target) && source->CanAttack(target);
+}
+
+static void RemoveInvalidGunshipMeleeTargets(Creature* source)
+{
+    if (!GetGunshipCarrier(source))
+        return;
+    ThreatList const targets = source->getThreatManager().getThreatList();
+    for (HostileReference* reference : targets)
+        if (Unit* target = reference->getTarget())
+            if (!IsGunshipMeleeTarget(source, target))
+                source->getThreatManager().modifyThreatPercent(target, -101);
+    if (Unit* target = source->GetVictim())
+        if (!IsGunshipMeleeTarget(source, target))
+        {
+            source->AttackStop();
+            source->GetMotionMaster()->MoveIdle();
+        }
+}
+
+static Player* SelectGunshipPlayer(Creature* source, bool sameTransport, SpellEntry const* spellInfo = nullptr)
+{
+    GenericTransport* sourceTransport = GetGunshipCarrier(source);
+    if (!sourceTransport)
+        return nullptr;
     Player* selected = nullptr;
     for (auto& playerRef : source->GetMap()->GetPlayers())
     {
@@ -190,26 +245,12 @@ static Player* SelectGunshipPlayer(Creature* source, bool sameTransport)
         if (!player || !player->IsAlive() || player->IsGameMaster())
             continue;
 
-        bool sourceIsAlliance = source->GetEntry() == NPC_GUNSHIP_MURADIN ||
-            source->GetEntry() == NPC_SKYBREAKER_RIFLEMAN ||
-            source->GetEntry() == NPC_SKYBREAKER_MORTAR_SOLDIER ||
-            source->GetEntry() == NPC_SKYBREAKER_MARINE ||
-            source->GetEntry() == NPC_SKYBREAKER_SERGEANT ||
-            source->GetEntry() == NPC_SKYBREAKER_SORCERER;
-        bool onSourceTransport = source->GetTransport() &&
-            player->GetTransport() == source->GetTransport();
-
-        // Rocket Pack landings can update the deck aura before the player's
-        // GenericTransport pointer is refreshed. The original encounter uses
-        // these two deck auras for target eligibility, so accept either signal
-        // instead of letting the enemy commander drop combat after a landing.
-        if (!onSourceTransport)
-            onSourceTransport = player->HasAura(sourceIsAlliance ?
-                SPELL_SKYBREAKER_DECK : SPELL_ORGRIMS_HAMMER_DECK);
-
-        bool onAnyGunship = player->GetTransport() ||
-            player->HasAura(SPELL_SKYBREAKER_DECK) || player->HasAura(SPELL_ORGRIMS_HAMMER_DECK);
-        if (!onAnyGunship || onSourceTransport != sameTransport)
+        GenericTransport* playerTransport = GetGunshipCarrier(player);
+        if (!playerTransport || (sourceTransport == playerTransport) != sameTransport)
+            continue;
+        if (sameTransport && !IsGunshipMeleeTarget(source, player))
+            continue;
+        if (spellInfo && !source->CanAttackSpell(player, spellInfo))
             continue;
         if (!selected || source->GetDistance(player) < source->GetDistance(selected))
             selected = player;
@@ -317,18 +358,14 @@ struct npc_gunshipAI : public Scripted_NoMovementAI
             return;
         }
 
-        // The first cannon breakpoint calls the enemy freeze mage. Blizzard
-        // also gates this to no earlier than one minute; the captain enforces
-        // that timer when it receives this request.
+        // The hull breakpoint requests the mage; the instance owns its timer.
         bool isEnemyShip = (m_instance->GetPlayerTeam() == ALLIANCE && m_creature->GetEntry() == NPC_ORGRIMS_HAMMER) ||
             (m_instance->GetPlayerTeam() == HORDE && m_creature->GetEntry() == NPC_SKYBREAKER);
         if (isEnemyShip && !m_mageRequested && m_creature->GetHealthPercent() > 90.0f &&
                 damage >= m_creature->GetHealth() - m_creature->GetMaxHealth() * 9 / 10)
         {
             m_mageRequested = true;
-            if (Creature* captain = m_instance->GetSingleCreatureFromStorage(
-                    m_instance->GetPlayerTeam() == ALLIANCE ? NPC_GUNSHIP_SAURFANG : NPC_GUNSHIP_MURADIN))
-                captain->AI()->SendAIEvent(AI_EVENT_CUSTOM_C, m_creature, captain);
+            m_instance->RequestGunshipMage();
         }
 
         if (damage < m_creature->GetHealth() || m_ended)
@@ -380,322 +417,282 @@ struct npc_gunshipAI : public Scripted_NoMovementAI
     }
 };
 
-UnitAI* GetAI_npc_gunship(Creature* creature)
+struct npc_gunship_cannonAI : public NullCreatureAI
 {
-    return new npc_gunshipAI(creature);
-}
-
-struct npc_gunship_cannonAI : public ScriptedAI
-{
-    npc_gunship_cannonAI(Creature* creature) : ScriptedAI(creature)
+    npc_gunship_cannonAI(Creature* creature) : NullCreatureAI(creature)
     {
         SetReactState(REACT_PASSIVE);
-        Reset();
     }
 
-    void Reset() override
+    void OnPassengerRide(Unit* passenger, bool boarded, uint8 /*seat*/) override
     {
-        // A gunship cannon's ENERGY resource represents stored Heat. Generic
-        // WotLK energy users initialize at 100, but retail cannons begin each
-        // attempt cold and build Heat only through Cannon Blast.
-        m_creature->SetPower(POWER_ENERGY, 0);
-        m_creature->SetImmobilizedState(true);
-    }
-
-    void OnPassengerRide(Unit* /*passenger*/, bool boarded, uint8 /*seat*/) override
-    {
-        if (!boarded)
-        {
-            // The client legitimately reports ROOT for these turrets, but the
-            // generic movement validation can clear it while controlled.
-            m_creature->SetImmobilizedState(false);
-            m_creature->SetImmobilizedState(true);
-        }
-    }
-
-    void UpdateAI(uint32 /*diff*/) override
-    {
-        // A cannon which was hit during Below Zero may retain hostile combat
-        // state for a server update after the aura has gone. Spell-clicks are
-        // rejected for creatures in combat, so normalize only that stale
-        // post-freeze state. This does not alter turret facing or movement.
-        if (!m_creature->HasAura(SPELL_BELOW_ZERO) && m_creature->IsInCombat())
-            m_creature->CombatStop(true);
+        if (boarded)
+            m_creature->CastSpell(passenger, SPELL_SUPPRESS_WHISPERS, TRIGGERED_OLD_TRIGGERED);
     }
 };
 
-UnitAI* GetAI_npc_gunship_cannon(Creature* creature)
+enum GunshipActions
 {
-    return new npc_gunship_cannonAI(creature);
+    GUNSHIP_BOARDERS,
+    GUNSHIP_FREEZE,
+    GUNSHIP_ATTACK_CALL,
+    GUNSHIP_CREW_FIRST = 100,
+};
+
+static Creature* SummonLocalOn(Creature* anchor, uint32 entry, GunshipPosition const& pos, uint32 despawn = 0)
+{
+    if (!anchor)
+        return nullptr;
+
+    return anchor->SummonCreature(entry, pos.x, pos.y, pos.z, pos.o,
+        despawn ? TEMPSPAWN_TIMED_OOC_OR_DEAD_DESPAWN : TEMPSPAWN_CORPSE_TIMED_DESPAWN,
+        despawn ? despawn : 15000, true);
+}
+
+Creature* instance_icecrown_citadel::GetGunshipCaptain() const
+{
+    return GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_GUNSHIP_SAURFANG : NPC_GUNSHIP_MURADIN, true);
+}
+
+void instance_icecrown_citadel::InitializeGunshipActions()
+{
+    m_gunshipFreezeRequested = false;
+    m_gunshipFreezeReady = false;
+    m_gunshipNextArtilleryCall = false;
+    m_gunshipTimers.AddCustomAction(GUNSHIP_BOARDERS, true, [this]()
+    {
+        SpawnGunshipBoardingWave();
+        m_gunshipTimers.ResetTimer(GUNSHIP_BOARDERS, TIMER_BOARDING_WAVE);
+    });
+    m_gunshipTimers.AddCustomAction(GUNSHIP_FREEZE, true, [this]()
+    {
+        m_gunshipFreezeReady = true;
+        if (m_gunshipFreezeRequested)
+            SpawnGunshipFreezeMage();
+    });
+    m_gunshipTimers.AddCustomAction(GUNSHIP_ATTACK_CALL, true, [this]()
+    {
+        if (Creature* captain = GetGunshipCaptain())
+        {
+            bool allianceCrew = captain->GetEntry() == NPC_GUNSHIP_MURADIN;
+            DoBroadcastText(allianceCrew ?
+                (m_gunshipNextArtilleryCall ? SAY_ALLIANCE_MORTAR : SAY_ALLIANCE_GUNNERS) :
+                (m_gunshipNextArtilleryCall ? SAY_HORDE_ROCKETEERS : SAY_HORDE_GUNNERS), captain);
+            m_gunshipNextArtilleryCall = !m_gunshipNextArtilleryCall;
+        }
+        m_gunshipTimers.ResetTimer(GUNSHIP_ATTACK_CALL, 30000, 45000);
+    });
+    for (uint32 slot = 0; slot < 14; ++slot)
+        m_gunshipTimers.AddCustomAction(GUNSHIP_CREW_FIRST + slot, true, [this, slot]() { SpawnGunshipCrew(slot); });
+}
+
+void instance_icecrown_citadel::StartGunshipActions()
+{
+    m_gunshipTimers.ResetAllTimers();
+    m_gunshipFreezeRequested = false;
+    m_gunshipFreezeReady = false;
+    m_gunshipNextArtilleryCall = false;
+    m_gunshipFreezeMageGuid.Clear();
+    for (ObjectGuid& guid : m_gunshipCrewGuids)
+        guid.Clear();
+    m_gunshipTimers.ResetTimer(GUNSHIP_BOARDERS, TIMER_FIRST_BOARDING);
+    m_gunshipTimers.ResetTimer(GUNSHIP_FREEZE, TIMER_FIRST_FREEZE_MAGE);
+    m_gunshipTimers.ResetTimer(GUNSHIP_ATTACK_CALL, 25000, 35000);
+    for (uint32 slot = 0; slot < 14; ++slot)
+        SpawnGunshipCrew(slot);
+}
+
+void instance_icecrown_citadel::StopGunshipActions()
+{
+    m_gunshipTimers.ResetAllTimers();
+    if (Creature* captain = GetGunshipCaptain())
+    {
+        DespawnGunshipAdds(captain);
+        captain->CombatStop(true);
+    }
+}
+
+void instance_icecrown_citadel::RequestGunshipMage()
+{
+    m_gunshipFreezeRequested = true;
+    if (m_gunshipFreezeReady)
+        SpawnGunshipFreezeMage();
+}
+
+void instance_icecrown_citadel::GunshipCrewDied(Creature* creature)
+{
+    if (GetData(TYPE_GUNSHIP_BATTLE) != IN_PROGRESS)
+        return;
+    if (creature->GetObjectGuid() == m_gunshipFreezeMageGuid)
+    {
+        ReleasePlayerGunshipCannons(creature, this);
+        m_gunshipFreezeMageGuid.Clear();
+        m_gunshipFreezeReady = false;
+        m_gunshipTimers.ResetTimer(GUNSHIP_FREEZE, TIMER_FREEZE_MAGE_RESPAWN, 33500);
+        return;
+    }
+    for (uint32 slot = 0; slot < 14; ++slot)
+        if (m_gunshipCrewGuids[slot] == creature->GetObjectGuid())
+            m_gunshipTimers.ResetTimer(GUNSHIP_CREW_FIRST + slot, slot < 12 ? TIMER_RANGED_CREW_REFILL : 1000);
+}
+
+void instance_icecrown_citadel::SpawnGunshipCrew(uint32 slot)
+{
+    Creature* captain = GetGunshipCaptain();
+    if (!captain)
+    {
+        m_gunshipTimers.ResetTimer(GUNSHIP_CREW_FIRST + slot, 2000);
+        return;
+    }
+    bool allianceCrew = captain->GetEntry() == NPC_GUNSHIP_MURADIN;
+    uint32 entry;
+    GunshipPosition const* position;
+    if (slot < 8)
+    {
+        if (slot >= (Is25ManDifficulty() ? 8u : 4u))
+            return;
+        entry = allianceCrew ? NPC_SKYBREAKER_RIFLEMAN : NPC_KORKRON_AXETHROWER;
+        position = &(allianceCrew ? sSkybreakerRanged : sOrgrimsRanged)[slot];
+    }
+    else if (slot < 12)
+    {
+        if (slot - 8 >= (Is25ManDifficulty() ? 4u : 2u))
+            return;
+        entry = allianceCrew ? NPC_SKYBREAKER_MORTAR_SOLDIER : NPC_KORKRON_ROCKETEER;
+        position = &(allianceCrew ? sSkybreakerMortar : sOrgrimsRocket)[slot - 8];
+    }
+    else
+    {
+        entry = allianceCrew ? NPC_SKYBREAKER_SORCERER : NPC_KORKRON_BATTLE_MAGE;
+        position = &(allianceCrew ? sSkybreakerMages : sOrgrimsMages)[slot - 11];
+    }
+    if (Creature* crew = SummonLocalOn(captain, entry, *position))
+    {
+        m_gunshipCrewGuids[slot] = crew->GetObjectGuid();
+        if (slot >= 12)
+            crew->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, captain, crew, 0);
+    }
+    else
+        m_gunshipTimers.ResetTimer(GUNSHIP_CREW_FIRST + slot, 2000);
+}
+
+void instance_icecrown_citadel::SpawnGunshipFreezeMage()
+{
+    Creature* captain = GetGunshipCaptain();
+    if (!captain)
+        return;
+    bool allianceCrew = captain->GetEntry() == NPC_GUNSHIP_MURADIN;
+    uint32 entry = allianceCrew ? NPC_SKYBREAKER_SORCERER : NPC_KORKRON_BATTLE_MAGE;
+    Creature* current = m_gunshipFreezeMageGuid ? captain->GetMap()->GetCreature(m_gunshipFreezeMageGuid) : nullptr;
+    if (current && current->IsAlive())
+        return;
+
+    GunshipPosition const* positions = allianceCrew ? sSkybreakerMages : sOrgrimsMages;
+    GunshipPosition spawn = allianceCrew ? sSkybreakerMageSpawn : sOrgrimsMageSpawn;
+    spawn.x += frand(-2.0f, 2.0f);
+    spawn.y += frand(-2.0f, 2.0f);
+    Creature* mage = SummonLocalOn(captain, entry, spawn);
+    for (uint8 attempt = 0; !mage && attempt < 2; ++attempt)
+    {
+        GunshipPosition retry = spawn;
+        retry.x += attempt == 0 ? 1.0f : -1.0f;
+        mage = SummonLocalOn(captain, entry, retry);
+    }
+
+    // The two rear mages are permanent portal channelers and must never
+    // be repurposed as the Below Zero kill target. If the center-deck
+    // summon fails, leave the cannons usable and retry shortly instead of
+    // announcing a freeze that the raid cannot clear.
+    if (!mage)
+    {
+        m_gunshipTimers.ResetTimer(GUNSHIP_FREEZE, 2000);
+        return;
+    }
+
+    if (mage->GetTransport() != captain->GetTransport())
+    {
+        mage->ForcedDespawn();
+        m_gunshipTimers.ResetTimer(GUNSHIP_FREEZE, 5000);
+        return;
+    }
+
+    // Keep the moving-transport passenger updating even if the enemy ship
+    // briefly crosses an otherwise inactive grid. Launching a transport-
+    // local spline mirrors the original rear-deck-to-center sequence and
+    // avoids teleporting or double-transforming the passenger.
+    mage->SetActiveObjectState(true);
+    Movement::MoveSplineInit movement(*mage);
+    movement.MoveTo(positions[0].x, positions[0].y, positions[0].z, false);
+    movement.SetWalk(false);
+    movement.SetFacing(positions[0].o);
+    int32 travelTime = movement.Launch();
+
+    m_gunshipFreezeMageGuid = mage->GetObjectGuid();
+    mage->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, captain, mage, travelTime > 0 ? uint32(travelTime) : 1);
+    DoBroadcastText(allianceCrew ? SAY_ALLIANCE_MAGE : SAY_HORDE_MAGE, captain);
+}
+
+void instance_icecrown_citadel::SpawnGunshipBoardingWave()
+{
+    Creature* captain = GetGunshipCaptain();
+    if (!captain)
+        return;
+
+    bool allianceCrew = captain->GetEntry() == NPC_GUNSHIP_MURADIN;
+    Creature* playerCaptain = GetSingleCreatureFromStorage(
+        allianceCrew ? NPC_GUNSHIP_SAURFANG : NPC_GUNSHIP_MURADIN);
+    if (!playerCaptain || !playerCaptain->GetTransport())
+        return;
+
+    GunshipPosition const& portalPos = allianceCrew ? sSkybreakerPortal : sOrgrimsPortal;
+    GunshipPosition const& exitPos = allianceCrew ? sOrgrimsExit : sSkybreakerExit;
+    SummonLocalOn(captain, NPC_TELEPORT_PORTAL, portalPos, 21000);
+    SummonLocalOn(playerCaptain, NPC_TELEPORT_EXIT, exitPos, 23000);
+
+    uint32 marineEntry = allianceCrew ? NPC_SKYBREAKER_MARINE : NPC_KORKRON_REAVER;
+    uint32 leaderEntry = allianceCrew ? NPC_SKYBREAKER_SERGEANT : NPC_KORKRON_SERGEANT;
+    uint32 marineCount = Is25ManDifficulty() ? 4 : 2;
+    uint32 leaderCount = Is25ManDifficulty() ? 2 : 1;
+
+    for (uint32 i = 0; i < marineCount; ++i)
+    {
+        GunshipPosition pos = exitPos;
+        pos.x += float(i % 2) * 2.0f - 1.0f;
+        pos.y += float(i / 2) * 2.0f - 1.0f;
+        if (Creature* add = SummonLocalOn(playerCaptain, marineEntry, pos, 70000))
+            add->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, captain, add);
+    }
+
+    for (uint32 i = 0; i < leaderCount; ++i)
+    {
+        GunshipPosition pos = exitPos;
+        pos.x += i ? 3.0f : -3.0f;
+        if (Creature* add = SummonLocalOn(playerCaptain, leaderEntry, pos, 70000))
+            add->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, captain, add);
+    }
+
+    DoBroadcastText(allianceCrew ? SAY_ALLIANCE_BOARDERS : SAY_HORDE_BOARDERS, captain);
 }
 
 struct npc_gunship_captainAI : public ScriptedAI
 {
     npc_gunship_captainAI(Creature* creature) : ScriptedAI(creature),
-        m_instance(static_cast<instance_icecrown_citadel*>(creature->GetInstanceData()))
-    {
-        Reset();
-    }
+        m_instance(static_cast<instance_icecrown_citadel*>(creature->GetInstanceData())) {}
 
     instance_icecrown_citadel* m_instance;
-    uint32 m_boardingTimer;
-    uint32 m_freezeTimer;
-    uint32 m_cleaveTimer;
-    uint32 m_throwTimer;
-    uint32 m_attackCallTimer;
-    bool m_nextArtilleryCall;
-    bool m_active;
-    bool m_freezeRequested;
-    ObjectGuid m_rangedCrewGuids[8];
-    ObjectGuid m_artilleryCrewGuids[4];
-    uint32 m_rangedCrewRespawnTimers[8];
-    uint32 m_artilleryCrewRespawnTimers[4];
-    ObjectGuid m_channelMageGuids[2];
-    ObjectGuid m_freezeMageGuid;
 
-    bool IsEnemyCaptain() const
+    void Reset() override { ScriptedAI::Reset(); }
+
+    void MoveInLineOfSight(Unit* who) override
     {
-        if (!m_instance)
-            return false;
-        return (m_instance->GetPlayerTeam() == ALLIANCE && m_creature->GetEntry() == NPC_GUNSHIP_SAURFANG) ||
-            (m_instance->GetPlayerTeam() == HORDE && m_creature->GetEntry() == NPC_GUNSHIP_MURADIN);
+        if (IsGunshipMeleeTarget(m_creature, who))
+            ScriptedAI::MoveInLineOfSight(who);
     }
 
-    void Reset() override
+    void AttackStart(Unit* who) override
     {
-        m_boardingTimer = TIMER_FIRST_BOARDING;
-        m_freezeTimer = TIMER_FIRST_FREEZE_MAGE;
-        m_cleaveTimer = urand(2000, 10000);
-        m_throwTimer = urand(3000, 6000);
-        m_attackCallTimer = urand(25000, 35000);
-        m_nextArtilleryCall = false;
-        m_active = false;
-        m_freezeRequested = false;
-        for (uint8 i = 0; i < 8; ++i)
-        {
-            m_rangedCrewGuids[i].Clear();
-            m_rangedCrewRespawnTimers[i] = 0;
-        }
-        for (uint8 i = 0; i < 4; ++i)
-        {
-            m_artilleryCrewGuids[i].Clear();
-            m_artilleryCrewRespawnTimers[i] = 0;
-        }
-        m_channelMageGuids[0].Clear();
-        m_channelMageGuids[1].Clear();
-        m_freezeMageGuid.Clear();
-    }
-
-    void ReceiveAIEvent(AIEventType eventType, Unit* /*sender*/, Unit* /*invoker*/, uint32 /*miscValue*/) override
-    {
-        if (eventType == AI_EVENT_CUSTOM_A && IsEnemyCaptain())
-        {
-            Reset();
-            m_active = true;
-            // The opposing transport can move outside every player's active
-            // grid. Keep its captain ticking because this AI owns the boarding,
-            // ranged-crew refill and Below Zero timers.
-            m_creature->SetActiveObjectState(true);
-            m_creature->CastSpell(m_creature, SPELL_CAPTAIN_BATTLE_FURY, TRIGGERED_OLD_TRIGGERED);
-            UpdateRangedCrew(0, true);
-        }
-        else if (eventType == AI_EVENT_CUSTOM_B)
-        {
-            m_active = false;
-            m_creature->SetActiveObjectState(false);
-            DespawnGunshipAdds(m_creature);
-            m_creature->CombatStop(true);
-        }
-        else if (eventType == AI_EVENT_CUSTOM_C && IsEnemyCaptain())
-            m_freezeRequested = true;
-        else if (eventType == AI_EVENT_CUSTOM_D && IsEnemyCaptain())
-        {
-            // The replacement cooldown begins when the Below Zero mage dies,
-            // not when she initially appears.  Starting it at summon time
-            // allowed an immediate replacement after a late kill.
-            m_freezeMageGuid.Clear();
-            m_freezeTimer = urand(TIMER_FREEZE_MAGE_RESPAWN, 33500);
-        }
-    }
-
-    // GunshipPosition values are offsets on a moving transport, not map
-    // coordinates. WorldObject::SummonCreature already detects the summoner's
-    // transport, converts these offsets to world coordinates and attaches the
-    // summon as a passenger. Converting/attaching here a second time sends the
-    // summon far away from the deck.
-    Creature* SummonLocalOn(Creature* anchor, uint32 entry, GunshipPosition const& pos, uint32 despawn = 0)
-    {
-        if (!anchor)
-            return nullptr;
-
-        return anchor->SummonCreature(entry, pos.x, pos.y, pos.z, pos.o,
-            despawn ? TEMPSPAWN_TIMED_OOC_OR_DEAD_DESPAWN : TEMPSPAWN_CORPSE_TIMED_DESPAWN,
-            despawn ? despawn : 15000, true);
-    }
-
-    Creature* SummonLocal(uint32 entry, GunshipPosition const& pos, uint32 despawn = 0)
-    {
-        return SummonLocalOn(m_creature, entry, pos, despawn);
-    }
-
-    void UpdateCrewSlot(ObjectGuid& guid, uint32& respawnTimer, uint32 entry,
-        GunshipPosition const& position, uint32 diff, bool immediate)
-    {
-        Creature* current = guid ? m_creature->GetMap()->GetCreature(guid) : nullptr;
-        if (current && current->IsAlive())
-            return;
-
-        if (!immediate)
-        {
-            if (!respawnTimer)
-            {
-                respawnTimer = TIMER_RANGED_CREW_REFILL;
-                return;
-            }
-
-            if (respawnTimer > diff)
-            {
-                respawnTimer -= diff;
-                return;
-            }
-        }
-
-        respawnTimer = 0;
-        if (Creature* replacement = SummonLocal(entry, position))
-            guid = replacement->GetObjectGuid();
-        else
-            respawnTimer = 2000;
-    }
-
-    void UpdateRangedCrew(uint32 diff, bool immediate = false)
-    {
-        if (!m_instance || !IsEnemyCaptain())
-            return;
-
-        bool allianceCrew = m_creature->GetEntry() == NPC_GUNSHIP_MURADIN;
-        GunshipPosition const* ranged = allianceCrew ? sSkybreakerRanged : sOrgrimsRanged;
-        GunshipPosition const* artillery = allianceCrew ? sSkybreakerMortar : sOrgrimsRocket;
-        uint32 rangedEntry = allianceCrew ? NPC_SKYBREAKER_RIFLEMAN : NPC_KORKRON_AXETHROWER;
-        uint32 artilleryEntry = allianceCrew ? NPC_SKYBREAKER_MORTAR_SOLDIER : NPC_KORKRON_ROCKETEER;
-        uint32 rangedCount = m_instance->Is25ManDifficulty() ? 8 : 4;
-        uint32 artilleryCount = m_instance->Is25ManDifficulty() ? 4 : 2;
-
-        for (uint32 i = 0; i < rangedCount; ++i)
-            UpdateCrewSlot(m_rangedCrewGuids[i], m_rangedCrewRespawnTimers[i],
-                rangedEntry, ranged[i], diff, immediate);
-
-        for (uint32 i = 0; i < artilleryCount; ++i)
-            UpdateCrewSlot(m_artilleryCrewGuids[i], m_artilleryCrewRespawnTimers[i],
-                artilleryEntry, artillery[i], diff, immediate);
-
-        GunshipPosition const* magePositions = allianceCrew ? sSkybreakerMages : sOrgrimsMages;
-        uint32 mageEntry = allianceCrew ? NPC_SKYBREAKER_SORCERER : NPC_KORKRON_BATTLE_MAGE;
-        for (uint32 i = 0; i < 2; ++i)
-        {
-            Creature* mage = m_channelMageGuids[i] ? m_creature->GetMap()->GetCreature(m_channelMageGuids[i]) : nullptr;
-            if (mage && mage->IsAlive())
-                continue;
-            if ((mage = SummonLocal(mageEntry, magePositions[i + 1])))
-            {
-                m_channelMageGuids[i] = mage->GetObjectGuid();
-                mage->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, m_creature, mage, 0);
-            }
-        }
-    }
-
-    void SpawnFreezeMage()
-    {
-        bool allianceCrew = m_creature->GetEntry() == NPC_GUNSHIP_MURADIN;
-        uint32 entry = allianceCrew ? NPC_SKYBREAKER_SORCERER : NPC_KORKRON_BATTLE_MAGE;
-        Creature* current = m_freezeMageGuid ? m_creature->GetMap()->GetCreature(m_freezeMageGuid) : nullptr;
-        if (current && current->IsAlive())
-            return;
-
-        GunshipPosition const* positions = allianceCrew ? sSkybreakerMages : sOrgrimsMages;
-        GunshipPosition spawn = allianceCrew ? sSkybreakerMageSpawn : sOrgrimsMageSpawn;
-        spawn.x += frand(-2.0f, 2.0f);
-        spawn.y += frand(-2.0f, 2.0f);
-        Creature* mage = SummonLocal(entry, spawn);
-        for (uint8 attempt = 0; !mage && attempt < 2; ++attempt)
-        {
-            GunshipPosition retry = spawn;
-            retry.x += attempt == 0 ? 1.0f : -1.0f;
-            mage = SummonLocal(entry, retry);
-        }
-
-        // The two rear mages are permanent portal channelers and must never
-        // be repurposed as the Below Zero kill target. If the center-deck
-        // summon fails, leave the cannons usable and retry shortly instead of
-        // announcing a freeze that the raid cannot clear.
-        if (!mage)
-        {
-            m_freezeTimer = 2000;
-            return;
-        }
-
-        if (mage->GetTransport() != m_creature->GetTransport())
-        {
-            mage->ForcedDespawn();
-            m_freezeTimer = 5000;
-            return;
-        }
-
-        // Keep the moving-transport passenger updating even if the enemy ship
-        // briefly crosses an otherwise inactive grid. Launching a transport-
-        // local spline mirrors the original rear-deck-to-center sequence and
-        // avoids teleporting or double-transforming the passenger.
-        mage->SetActiveObjectState(true);
-        Movement::MoveSplineInit movement(*mage);
-        movement.MoveTo(positions[0].x, positions[0].y, positions[0].z, false);
-        movement.SetWalk(false);
-        movement.SetFacing(positions[0].o);
-        int32 travelTime = movement.Launch();
-
-        m_freezeMageGuid = mage->GetObjectGuid();
-        mage->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, m_creature, mage,
-            travelTime > 0 ? uint32(travelTime) : 1);
-        DoBroadcastText(allianceCrew ? SAY_ALLIANCE_MAGE : SAY_HORDE_MAGE, m_creature);
-    }
-
-    void SpawnBoardingWave()
-    {
-        if (!m_instance)
-            return;
-
-        bool allianceCrew = m_creature->GetEntry() == NPC_GUNSHIP_MURADIN;
-        Creature* playerCaptain = m_instance->GetSingleCreatureFromStorage(
-            allianceCrew ? NPC_GUNSHIP_SAURFANG : NPC_GUNSHIP_MURADIN);
-        if (!playerCaptain || !playerCaptain->GetTransport())
-            return;
-
-        GunshipPosition const& portalPos = allianceCrew ? sSkybreakerPortal : sOrgrimsPortal;
-        GunshipPosition const& exitPos = allianceCrew ? sOrgrimsExit : sSkybreakerExit;
-        SummonLocal(NPC_TELEPORT_PORTAL, portalPos, 21000);
-        SummonLocalOn(playerCaptain, NPC_TELEPORT_EXIT, exitPos, 23000);
-
-        uint32 marineEntry = allianceCrew ? NPC_SKYBREAKER_MARINE : NPC_KORKRON_REAVER;
-        uint32 leaderEntry = allianceCrew ? NPC_SKYBREAKER_SERGEANT : NPC_KORKRON_SERGEANT;
-        uint32 marineCount = m_instance->Is25ManDifficulty() ? 4 : 2;
-        uint32 leaderCount = m_instance->Is25ManDifficulty() ? 2 : 1;
-
-        for (uint32 i = 0; i < marineCount; ++i)
-        {
-            GunshipPosition pos = exitPos;
-            pos.x += float(i % 2) * 2.0f - 1.0f;
-            pos.y += float(i / 2) * 2.0f - 1.0f;
-            if (Creature* add = SummonLocalOn(playerCaptain, marineEntry, pos, 70000))
-                add->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, m_creature, add);
-        }
-
-        for (uint32 i = 0; i < leaderCount; ++i)
-        {
-            GunshipPosition pos = exitPos;
-            pos.x += i ? 3.0f : -3.0f;
-            if (Creature* add = SummonLocalOn(playerCaptain, leaderEntry, pos, 70000))
-                add->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, m_creature, add);
-        }
-
-        DoBroadcastText(allianceCrew ? SAY_ALLIANCE_BOARDERS : SAY_HORDE_BOARDERS, m_creature);
+        if (IsGunshipMeleeTarget(m_creature, who))
+            ScriptedAI::AttackStart(who);
     }
 
     void DamageTaken(Unit* /*dealer*/, uint32& damage, DamageEffectType /*damageType*/, SpellEntry const* /*spellInfo*/) override
@@ -704,148 +701,102 @@ struct npc_gunship_captainAI : public ScriptedAI
             damage = m_creature->GetHealth() - 1;
     }
 
-    void Aggro(Unit* /*who*/) override
+    void Aggro(Unit* who) override
     {
+        if (!IsGunshipMeleeTarget(m_creature, who))
+            return;
         DoBroadcastText(m_creature->GetEntry() == NPC_GUNSHIP_MURADIN ? SAY_MURADIN_AGGRO : SAY_SAURFANG_AGGRO, m_creature);
-        m_creature->CastSpell(m_creature, SPELL_CAPTAIN_BATTLE_FURY, TRIGGERED_OLD_TRIGGERED);
-    }
-
-    void EnterEvadeMode() override
-    {
-        if (!m_creature->IsAlive())
-            return;
-
-        // The enemy commander is both a combatant and the controller for the
-        // entire encounter. CreatureAI::EnterEvadeMode calls the virtual
-        // Reset(), which used to clear m_active and every boarding, crew and
-        // Below Zero timer as soon as the last player left the enemy deck.
-        // Reset only his personal combat state here; the encounter lifecycle
-        // remains owned by CUSTOM_A/CUSTOM_B and the instance state.
-        if (m_active && IsEnemyCaptain() && m_instance &&
-                m_instance->GetData(TYPE_GUNSHIP_BATTLE) == IN_PROGRESS)
-        {
-            UnitAI::EnterEvadeMode();
-            m_cleaveTimer = urand(2000, 10000);
-            m_throwTimer = urand(3000, 6000);
-            return;
-        }
-
-        ScriptedAI::EnterEvadeMode();
+        DoCastSpellIfCan(m_creature, SPELL_CAPTAIN_BATTLE_FURY, CAST_TRIGGERED);
     }
 
     void JustDied(Unit* /*killer*/) override
     {
-        // Normal combat damage cannot kill a gunship commander. A forced GM
-        // kill or abnormal external death must reset the encounter instead
-        // of leaving cannons frozen and boarding waves running forever.
-        if (m_active && m_instance && m_instance->GetData(TYPE_GUNSHIP_BATTLE) == IN_PROGRESS)
+        if (m_instance && m_instance->GetData(TYPE_GUNSHIP_BATTLE) == IN_PROGRESS)
             m_instance->SetData(TYPE_GUNSHIP_BATTLE, FAIL);
     }
 
     void UpdateAI(uint32 diff) override
     {
-        if (m_active && m_instance && m_instance->GetData(TYPE_GUNSHIP_BATTLE) == IN_PROGRESS)
-        {
-            if (m_boardingTimer <= diff)
-            {
-                SpawnBoardingWave();
-                m_boardingTimer = TIMER_BOARDING_WAVE;
-            }
-            else
-                m_boardingTimer -= diff;
-
-            UpdateRangedCrew(diff);
-
-            if (m_freezeTimer > diff)
-                m_freezeTimer -= diff;
-            else
-            {
-                m_freezeTimer = 0;
-                if (m_freezeRequested)
-                    SpawnFreezeMage();
-            }
-
-            if (m_attackCallTimer <= diff)
-            {
-                bool allianceCrew = m_creature->GetEntry() == NPC_GUNSHIP_MURADIN;
-                DoBroadcastText(allianceCrew ?
-                    (m_nextArtilleryCall ? SAY_ALLIANCE_MORTAR : SAY_ALLIANCE_GUNNERS) :
-                    (m_nextArtilleryCall ? SAY_HORDE_ROCKETEERS : SAY_HORDE_GUNNERS), m_creature);
-                m_nextArtilleryCall = !m_nextArtilleryCall;
-                m_attackCallTimer = urand(30000, 45000);
-            }
-            else
-                m_attackCallTimer -= diff;
-        }
-
-        if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
-        {
-            // The commander remains at his station, but must engage players
-            // who land on his gunship to kill the Below Zero mage.
-            if (m_active && IsEnemyCaptain())
-                if (Player* player = SelectGunshipPlayer(m_creature, true))
-                    AttackStart(player);
-            return;
-        }
-
-        if (m_cleaveTimer <= diff)
-        {
-            DoCastSpellIfCan(m_creature->GetVictim(), SPELL_CAPTAIN_CLEAVE);
-            m_cleaveTimer = urand(2000, 10000);
-        }
-        else
-            m_cleaveTimer -= diff;
-
-        if (!m_creature->CanReachWithMeleeAttack(m_creature->GetVictim()))
-        {
-            if (m_throwTimer <= diff)
-            {
-                DoCastSpellIfCan(m_creature->GetVictim(), SPELL_CAPTAIN_RENDING_THROW);
-                m_throwTimer = urand(3000, 6000);
-            }
-            else
-                m_throwTimer -= diff;
-        }
-
-        DoMeleeAttackIfReady();
+        RemoveInvalidGunshipMeleeTargets(m_creature);
+        if (m_instance && m_instance->GetData(TYPE_GUNSHIP_BATTLE) == IN_PROGRESS &&
+            m_instance->GetGunshipCaptain() == m_creature && !m_creature->GetVictim())
+            if (Player* player = SelectGunshipPlayer(m_creature, true))
+                AttackStart(player);
+        ScriptedAI::UpdateAI(diff);
     }
 };
 
-UnitAI* GetAI_npc_gunship_captain(Creature* creature)
+enum GunshipSoldierActions
 {
-    return new npc_gunship_captainAI(creature);
-}
+    GUNSHIP_SOLDIER_SHOT = 500,
+    GUNSHIP_SOLDIER_ARTILLERY,
+    GUNSHIP_SOLDIER_MAGE,
+    GUNSHIP_SOLDIER_EXPERIENCE,
+};
 
 struct npc_gunship_soldierAI : public ScriptedAI
 {
     npc_gunship_soldierAI(Creature* creature) : ScriptedAI(creature),
         m_instance(static_cast<instance_icecrown_citadel*>(creature->GetInstanceData())),
-        m_shotTimer(urand(2000, 4000)), m_artilleryTimer(urand(4000, 7000)),
-        m_woundTimer(urand(8000, 10000)), m_bladeTimer(urand(13000, 18000)),
-        m_experienceTimer(100000), m_mageCastRetryTimer(0), m_experienceLevel(0),
-        m_boarded(false), m_freezeMage(false), m_mageCastStarted(false)
+        m_experienceLevel(0), m_boarded(false), m_freezeMage(false)
     {
-        uint32 entry = creature->GetEntry();
-        if (entry == NPC_SKYBREAKER_RIFLEMAN || entry == NPC_KORKRON_AXETHROWER ||
-                entry == NPC_SKYBREAKER_MORTAR_SOLDIER || entry == NPC_KORKRON_ROCKETEER ||
-                entry == NPC_SKYBREAKER_SORCERER || entry == NPC_KORKRON_BATTLE_MAGE)
+        AddCustomAction(GUNSHIP_SOLDIER_SHOT, true, [this]()
+        {
+            uint32 spellId = m_creature->GetEntry() == NPC_SKYBREAKER_RIFLEMAN ? SPELL_SHOOT : SPELL_HURL_AXE;
+            if (Player* target = SelectGunshipPlayer(m_creature, false, sSpellTemplate.LookupEntry<SpellEntry>(spellId)))
+                DoCastSpellIfCan(target, spellId);
+            ResetTimer(GUNSHIP_SOLDIER_SHOT, 3000, 5000);
+        });
+        AddCustomAction(GUNSHIP_SOLDIER_ARTILLERY, true, [this]()
+        {
+            uint32 spellId = m_creature->GetEntry() == NPC_SKYBREAKER_MORTAR_SOLDIER ?
+                SPELL_ROCKET_ARTILLERY_A : SPELL_ROCKET_ARTILLERY_H;
+            if (Player* target = SelectGunshipPlayer(m_creature, false, sSpellTemplate.LookupEntry<SpellEntry>(spellId)))
+                DoCastSpellIfCan(target, spellId, CAST_TRIGGERED);
+            ResetTimer(GUNSHIP_SOLDIER_ARTILLERY, 9000);
+        });
+        AddCustomAction(GUNSHIP_SOLDIER_MAGE, true, [this]()
+        {
+            if (m_freezeMage)
+            {
+                if (DoCastSpellIfCan(nullptr, SPELL_BELOW_ZERO) != CAST_OK)
+                    ResetTimer(GUNSHIP_SOLDIER_MAGE, 2000);
+            }
+            else
+            {
+                if (!m_creature->HasAura(SPELL_SHADOW_CHANNELING))
+                    DoCastSpellIfCan(nullptr, SPELL_SHADOW_CHANNELING);
+                ResetTimer(GUNSHIP_SOLDIER_MAGE, 2000);
+            }
+        });
+        AddCustomAction(GUNSHIP_SOLDIER_EXPERIENCE, true, [this]() { AdvanceExperience(); });
+        if (IsRanged() || IsArtillery() || IsMage())
         {
             SetCombatMovement(false);
             SetReactState(REACT_PASSIVE);
         }
+        if (IsRanged())
+            ResetTimer(GUNSHIP_SOLDIER_SHOT, 2000, 4000);
+        if (IsArtillery())
+            ResetTimer(GUNSHIP_SOLDIER_ARTILLERY, 4000, 7000);
     }
 
     instance_icecrown_citadel* m_instance;
-    uint32 m_shotTimer;
-    uint32 m_artilleryTimer;
-    uint32 m_woundTimer;
-    uint32 m_bladeTimer;
-    uint32 m_experienceTimer;
-    uint32 m_mageCastRetryTimer;
     uint8 m_experienceLevel;
     bool m_boarded;
     bool m_freezeMage;
-    bool m_mageCastStarted;
+
+    void MoveInLineOfSight(Unit* who) override
+    {
+        if (IsGunshipMeleeTarget(m_creature, who))
+            ScriptedAI::MoveInLineOfSight(who);
+    }
+
+    void AttackStart(Unit* who) override
+    {
+        if (IsGunshipMeleeTarget(m_creature, who))
+            ScriptedAI::AttackStart(who);
+    }
 
     bool IsRanged() const
     {
@@ -862,32 +813,27 @@ struct npc_gunship_soldierAI : public ScriptedAI
         return m_creature->GetEntry() == NPC_SKYBREAKER_SORCERER || m_creature->GetEntry() == NPC_KORKRON_BATTLE_MAGE;
     }
 
-    bool IsLeader() const
+    void Reset() override
     {
-        return m_creature->GetEntry() == NPC_SKYBREAKER_SERGEANT || m_creature->GetEntry() == NPC_KORKRON_SERGEANT;
+        ScriptedAI::Reset();
+        if (IsRanged())
+            ResetTimer(GUNSHIP_SOLDIER_SHOT, 2000, 4000);
+        if (IsArtillery())
+            ResetTimer(GUNSHIP_SOLDIER_ARTILLERY, 4000, 7000);
     }
-
-    void Reset() override { }
 
     void ReceiveAIEvent(AIEventType eventType, Unit* /*sender*/, Unit* /*invoker*/, uint32 miscValue) override
     {
         if (eventType != AI_EVENT_CUSTOM_A)
             return;
-
         if (IsMage())
         {
             m_freezeMage = miscValue != 0;
-            m_mageCastStarted = false;
-            // A positive value is the rear-deck-to-center spline duration.
-            // Permanent rear portal channelers are initialized with zero.
-            m_mageCastRetryTimer = miscValue;
+            ResetTimer(GUNSHIP_SOLDIER_MAGE, miscValue);
             return;
         }
-
-        // SpawnBoardingWave has already placed this unit on the target
-        // gunship transport.  Applying 70104 here performs a second,
-        // database-targeted teleport and can remove the unit from the deck.
         m_boarded = true;
+        ResetTimer(GUNSHIP_SOLDIER_EXPERIENCE, 100000);
         DoCastSpellIfCan(m_creature, SPELL_BATTLE_EXPERIENCE, CAST_TRIGGERED);
         DoCastSpellIfCan(m_creature,
             m_instance && m_instance->GetPlayerTeam() == ALLIANCE ? SPELL_MELEE_TARGETING_A : SPELL_MELEE_TARGETING_H,
@@ -904,131 +850,34 @@ struct npc_gunship_soldierAI : public ScriptedAI
             DoCastSpellIfCan(m_creature, SPELL_DESPERATE_RESOLVE, CAST_TRIGGERED);
     }
 
-    void JustDied(Unit* /*killer*/) override
-    {
-        if (!m_freezeMage || !m_instance)
-            return;
-
-        ReleasePlayerGunshipCannons(m_creature, m_instance);
-
-        if (Creature* captain = m_instance->GetSingleCreatureFromStorage(
-                m_instance->GetPlayerTeam() == ALLIANCE ? NPC_GUNSHIP_SAURFANG : NPC_GUNSHIP_MURADIN))
-            captain->AI()->SendAIEvent(AI_EVENT_CUSTOM_D, m_creature, captain);
-    }
-
-    void UpdateBattleExperience(uint32 diff)
+    void AdvanceExperience()
     {
         if (!m_boarded || m_experienceLevel >= (m_instance && m_instance->IsHeroicDifficulty() ? 4 : 3))
             return;
-        if (m_experienceTimer > diff)
-        {
-            m_experienceTimer -= diff;
-            return;
-        }
-
-        static uint32 const experienceSpells[] = {SPELL_EXPERIENCED, SPELL_VETERAN, SPELL_ELITE, SPELL_BERSERK};
-        static uint32 const experienceTimers[] = {70000, 60000, 90000, 90000};
+        static uint32 const spells[] = {SPELL_EXPERIENCED, SPELL_VETERAN, SPELL_ELITE, SPELL_BERSERK};
+        static uint32 const timers[] = {70000, 60000, 90000, 90000};
         if (m_experienceLevel)
-            m_creature->RemoveAurasDueToSpell(experienceSpells[m_experienceLevel - 1]);
-        DoCastSpellIfCan(m_creature, experienceSpells[m_experienceLevel], CAST_TRIGGERED);
-        m_experienceTimer = experienceTimers[m_experienceLevel];
-        ++m_experienceLevel;
+            m_creature->RemoveAurasDueToSpell(spells[m_experienceLevel - 1]);
+        DoCastSpellIfCan(m_creature, spells[m_experienceLevel], CAST_TRIGGERED);
+        ResetTimer(GUNSHIP_SOLDIER_EXPERIENCE, timers[m_experienceLevel++]);
     }
 
     void UpdateAI(uint32 diff) override
     {
         if (!m_instance || m_instance->GetData(TYPE_GUNSHIP_BATTLE) != IN_PROGRESS)
             return;
-
-        if (IsMage())
+        if (IsMage() || IsRanged() || IsArtillery())
         {
-            if (m_freezeMage)
-            {
-                // Below Zero is an area spell. Its DBC hostile targeting—not
-                // a manual creature scan—selects the opposing cannons.
-                if (!m_mageCastStarted)
-                {
-                    if (m_mageCastRetryTimer > diff)
-                        m_mageCastRetryTimer -= diff;
-                    else if (DoCastSpellIfCan(nullptr, SPELL_BELOW_ZERO) == CAST_OK)
-                        m_mageCastStarted = true;
-                    else
-                        m_mageCastRetryTimer = 2000;
-                }
-            }
-            else if (!m_creature->HasAura(SPELL_SHADOW_CHANNELING))
-                DoCastSpellIfCan(nullptr, SPELL_SHADOW_CHANNELING);
+            UpdateTimers(diff, m_creature->IsInCombat());
             return;
         }
-
-        if (IsRanged())
-        {
-            if (m_shotTimer <= diff)
-            {
-                if (Player* target = SelectGunshipPlayer(m_creature, false))
-                    DoCastSpellIfCan(target, m_creature->GetEntry() == NPC_SKYBREAKER_RIFLEMAN ? SPELL_SHOOT : SPELL_HURL_AXE);
-                m_shotTimer = urand(3000, 5000);
-            }
-            else
-                m_shotTimer -= diff;
-            return;
-        }
-
-        if (IsArtillery())
-        {
-            if (m_artilleryTimer <= diff)
-            {
-                uint32 spell = m_creature->GetEntry() == NPC_SKYBREAKER_MORTAR_SOLDIER
-                    ? SPELL_ROCKET_ARTILLERY_A : SPELL_ROCKET_ARTILLERY_H;
-
-                // The artillery spells use a script effect whose value is the
-                // impact spell. Select a player on the opposing gunship here;
-                // the SpellScript below completes the original spell chain.
-                if (Player* target = SelectGunshipPlayer(m_creature, false))
-                    DoCastSpellIfCan(target, spell, CAST_TRIGGERED);
-                m_artilleryTimer = 9000;
-            }
-            else
-                m_artilleryTimer -= diff;
-            return;
-        }
-
-        UpdateBattleExperience(diff);
-
-        if (!m_creature->SelectHostileTarget() || !m_creature->GetVictim())
-        {
+        RemoveInvalidGunshipMeleeTargets(m_creature);
+        if (!m_creature->GetVictim())
             if (Player* player = SelectGunshipPlayer(m_creature, true))
                 AttackStart(player);
-            return;
-        }
-
-        if (IsLeader())
-        {
-            if (m_bladeTimer <= diff)
-            {
-                DoCastSpellIfCan(m_creature, SPELL_BLADESTORM);
-                m_bladeTimer = urand(25000, 30000);
-            }
-            else
-                m_bladeTimer -= diff;
-
-            if (m_woundTimer <= diff)
-            {
-                DoCastSpellIfCan(m_creature->GetVictim(), SPELL_WOUNDING_STRIKE);
-                m_woundTimer = urand(9000, 13000);
-            }
-            else
-                m_woundTimer -= diff;
-        }
-
-        DoMeleeAttackIfReady();
+        ScriptedAI::UpdateAI(diff);
     }
 };
-
-UnitAI* GetAI_npc_gunship_soldier(Creature* creature)
-{
-    return new npc_gunship_soldierAI(creature);
-}
 
 bool GossipHello_npc_zafod_boombox(Player* player, Creature* creature)
 {
@@ -1133,8 +982,6 @@ struct spell_incinerating_blast : public SpellScript
             uint32 damage = spell->GetDamage();
             uint32 energy = caster->GetPower(caster->GetPowerType());
             // Incinerating Blast consumes 10 Heat before its damage snapshot.
-            // Both TrinityCore and AzerothCore's 3.3.5 implementations retain
-            // the original quadratic scaling using this post-cost value.
             energy = energy > 10 ? energy - 10 : 0;
 
             // Verified 3.3.5 behavior: Incinerating Blast scales quadratically
@@ -1171,7 +1018,7 @@ struct spell_gunship_cannon_blast : public SpellScript
 ## spell_gunship_below_zero - 69705
 ######*/
 
-struct spell_gunship_below_zero : public SpellScript
+struct GunshipBelowZero : public SpellScript
 {
     bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex /*eff*/) const override
     {
@@ -1187,7 +1034,7 @@ struct spell_gunship_below_zero : public SpellScript
         // encounter authority and also prevents the enemy decorative cannons
         // from becoming selectable/frozen.
         instance_icecrown_citadel* instance =
-            static_cast<instance_icecrown_citadel*>(caster->GetInstanceData());
+            dynamic_cast<instance_icecrown_citadel*>(caster->GetInstanceData());
         if (!instance)
             return false;
 
@@ -1205,19 +1052,8 @@ struct spell_gunship_below_zero : public SpellScript
                 target->GetEntry() != NPC_HORDE_GUNSHIP_CANNON))
             return;
 
-        // Below Zero's DBC targeting determines which hostile cannons are hit.
-        // Preserve the client spell, then explicitly eject occupied seats. The
-        // generic Eject All Passengers spell is not reliable for cannons that
-        // are passengers of a moving gunship transport.
         target->SetPower(target->GetPowerType(), 0);
-        target->CastSpell(target, SPELL_EJECT_ALL_PASSENGERS, TRIGGERED_OLD_TRIGGERED);
-
-        if (VehicleInfo* vehicle = target->GetVehicleInfo())
-        {
-            for (uint8 seat = 0; seat < MAX_VEHICLE_SEAT; ++seat)
-                if (Unit* passenger = vehicle->GetPassenger(seat))
-                    passenger->ExitVehicle();
-        }
+        target->RemoveSpellsCausingAura(SPELL_AURA_CONTROL_VEHICLE);
     }
 };
 
@@ -1264,14 +1100,36 @@ struct spell_gunship_rocket_artillery_explosion : public SpellScript
         if (!instance || instance->GetData(TYPE_GUNSHIP_BATTLE) != IN_PROGRESS)
             return;
 
-        // TrinityCore and AzerothCore both resolve Rocket Artillery into the
-        // faction-specific Burning Pitch hull spell with 5000 base damage.
-        // Retaining the spell path also preserves encounter damage logging and
-        // lets the hull AI own victory/failure transitions.
         int32 damage = 5000;
         caster->CastCustomSpell(nullptr,
             instance->GetPlayerTeam() == HORDE ? SPELL_BURNING_PITCH_DAMAGE_A : SPELL_BURNING_PITCH_DAMAGE_H,
             &damage, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED);
+    }
+};
+
+struct GunshipVictoryTeleport : public SpellScript
+{
+    bool OnCheckTarget(const Spell* /*spell*/, Unit* target, SpellEffectIndex /*eff*/) const override
+    {
+        return target && target->IsPlayer();
+    }
+
+    void OnEffectExecute(Spell* spell, SpellEffectIndex effIdx) const override
+    {
+        if (effIdx == EFFECT_INDEX_1)
+            if (Unit* target = spell->GetUnitTarget())
+                target->ExitVehicle();
+    }
+};
+
+struct GunshipRocketPack : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (apply || aura->GetEffIndex() != EFFECT_INDEX_0 || !aura->GetTarget()->IsPlayer())
+            return;
+        Player* player = static_cast<Player*>(aura->GetTarget());
+        player->DestroyItemCount(ITEM_GOBLIN_ROCKET_PACK, player->GetItemCount(ITEM_GOBLIN_ROCKET_PACK), true);
     }
 };
 
@@ -1283,39 +1141,39 @@ bool NpcSpellClick_npc_gunship_cannon(Player* player, Creature* cannon, uint32 /
 
     bool ownCannon = (player->GetTeam() == ALLIANCE && cannon->GetEntry() == NPC_ALLIANCE_GUNSHIP_CANNON) ||
         (player->GetTeam() == HORDE && cannon->GetEntry() == NPC_HORDE_GUNSHIP_CANNON);
-    return !ownCannon;
+    return !ownCannon || cannon->HasAura(SPELL_BELOW_ZERO);
 }
 
 void AddSC_gunship_battle()
 {
     Script* pNewScript = new Script;
     pNewScript->Name = "npc_saurfang_gunship";
-    pNewScript->GetAI = &GetAI_npc_gunship_captain;
+    pNewScript->GetAI = &GetNewAIInstance<npc_gunship_captainAI>;
     pNewScript->pGossipHello = &GossipHello_npc_saurfang_gunship;
     pNewScript->pGossipSelect = &GossipSelect_npc_saurfang_gunship;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
     pNewScript->Name = "npc_muradin_gunship";
-    pNewScript->GetAI = &GetAI_npc_gunship_captain;
+    pNewScript->GetAI = &GetNewAIInstance<npc_gunship_captainAI>;
     pNewScript->pGossipHello = &GossipHello_npc_muradin_gunship;
     pNewScript->pGossipSelect = &GossipSelect_npc_muradin_gunship;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
     pNewScript->Name = "npc_gunship";
-    pNewScript->GetAI = &GetAI_npc_gunship;
+    pNewScript->GetAI = &GetNewAIInstance<npc_gunshipAI>;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
     pNewScript->Name = "npc_gunship_cannon";
-    pNewScript->GetAI = &GetAI_npc_gunship_cannon;
+    pNewScript->GetAI = &GetNewAIInstance<npc_gunship_cannonAI>;
     pNewScript->pNpcSpellClick = &NpcSpellClick_npc_gunship_cannon;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
     pNewScript->Name = "npc_gunship_soldier";
-    pNewScript->GetAI = &GetAI_npc_gunship_soldier;
+    pNewScript->GetAI = &GetNewAIInstance<npc_gunship_soldierAI>;
     pNewScript->RegisterSelf();
 
     pNewScript = new Script;
@@ -1326,7 +1184,9 @@ void AddSC_gunship_battle()
 
     RegisterSpellScript<spell_incinerating_blast>("spell_incinerating_blast");
     RegisterSpellScript<spell_gunship_cannon_blast>("spell_gunship_cannon_blast");
-    RegisterSpellScript<spell_gunship_below_zero>("spell_gunship_below_zero");
+    RegisterSpellScript<GunshipBelowZero>("spell_gunship_below_zero");
+    RegisterSpellScript<GunshipRocketPack>("spell_gunship_rocket_pack");
+    RegisterSpellScript<GunshipVictoryTeleport>("spell_gunship_victory_teleport");
     RegisterSpellScript<spell_gunship_rocket_artillery>("spell_gunship_rocket_artillery");
     RegisterSpellScript<spell_gunship_rocket_artillery_explosion>("spell_gunship_rocket_artillery_explosion");
 }
