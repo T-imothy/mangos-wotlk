@@ -6718,6 +6718,16 @@ bool ChatHandler::HandleInstanceUnbindCommand(char* args)
     if (!*args)
         return false;
 
+    bool groupOnly = strncmp(args, "group ", 6) == 0;
+    if (groupOnly)
+    {
+        args += 6;
+        while (*args == ' ')
+            ++args;
+        if (!*args)
+            return false;
+    }
+
     Player* player = getSelectedPlayer();
     if (!player)
         player = m_session->GetPlayer();
@@ -6732,6 +6742,42 @@ bool ChatHandler::HandleInstanceUnbindCommand(char* args)
 
         got_map = true;
         mapid = atoi(args);
+    }
+
+    if (groupOnly)
+    {
+        Group* group = player->GetGroup();
+        if (!group || group->IsBattleGroup())
+        {
+            SendSysMessage("Selected player has no instance group.");
+            return true;
+        }
+
+        for (uint8 i = 0; i < MAX_DIFFICULTY; ++i)
+        {
+            Group::BoundInstancesMap& binds = group->GetBoundInstances(Difficulty(i));
+            for (auto itr = binds.begin(); itr != binds.end();)
+            {
+                uint32 boundMapId = itr->first;
+                DungeonPersistentState* state = itr->second.state;
+                ++itr;
+                if (got_map && mapid != boundMapId)
+                    continue;
+
+                Map* map = sMapMgr.FindMap(boundMapId, state->GetInstanceId());
+                if (map && !map->GetPlayers().isEmpty())
+                {
+                    PSendSysMessage("Skipping occupied instance: map %u instance %u", boundMapId, state->GetInstanceId());
+                    continue;
+                }
+
+                PSendSysMessage("Unbinding group: map %u instance %u difficulty %u", boundMapId, state->GetInstanceId(), uint32(i));
+                group->UnbindInstance(boundMapId, i);
+                ++counter;
+            }
+        }
+        PSendSysMessage("group instances unbound: %u (character bindings unchanged)", counter);
+        return true;
     }
 
     for (uint8 i = 0; i < MAX_DIFFICULTY; ++i)
