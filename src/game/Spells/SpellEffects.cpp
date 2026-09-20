@@ -11613,7 +11613,7 @@ void Spell::EffectTransmitted(SpellEffectIndex eff_idx)
             break;
     }
 
-    pGameObj->SetRespawnTime(duration > 0 ? duration / IN_MILLISECONDS : 0);
+    pGameObj->SetRespawnTime(duration > 0 ? std::chrono::milliseconds(duration) : 0ms);
 
     pGameObj->SetOwnerGuid(m_caster->GetObjectGuid());
 
