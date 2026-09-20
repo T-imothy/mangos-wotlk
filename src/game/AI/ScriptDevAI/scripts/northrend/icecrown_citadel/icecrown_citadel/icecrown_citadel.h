@@ -6,6 +6,7 @@
 #define DEF_ICECROWN_CITADEL_H
 
 #include "Chat/Chat.h"
+#include "AI/ScriptDevAI/base/TimerAI.h"
 
 enum
 {
@@ -81,6 +82,7 @@ enum
     NPC_KORKRON_SERGEANT            = 36960,
 
     ITEM_GOBLIN_ROCKET_PACK         = 49278,
+    SPELL_ROCKET_PACK        = 73077,
 
     NPC_OVERLORD_SAURFANG           = 37187,        // Saurfang intro / outro
     NPC_KORKRON_REAVER_RISE         = 37920,
@@ -339,7 +341,6 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         bool IsEncounterInProgress() const override;
 
         void OnPlayerEnter(Player* pPlayer) override;
-        void OnPlayerLeave(Player* pPlayer) override;
         void OnCreatureCreate(Creature* pCreature) override;
         void OnObjectCreate(GameObject* pGo) override;
         void OnCreatureRespawn(Creature* pCreature) override;
@@ -352,6 +353,8 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         uint32 GetData(uint32 uiType) const override;
 
         uint32 GetPlayerTeam() const { return m_uiTeam; }
+        Creature* GetGunshipCaptain() const;
+        void RequestGunshipMage();
 
         const char* Save() const override { return m_strInstData.c_str(); }
         void Load(const char* strIn) override;
@@ -380,6 +383,21 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         void ExecuteChatCommand(ChatHandler* handler, char* args) override;
 
     private:
+        void InitializeGunshipActions();
+        void StartGunshipActions();
+        void StopGunshipActions();
+        void GunshipCrewDied(Creature* creature);
+        void SpawnGunshipCrew(uint32 slot);
+        void SpawnGunshipFreezeMage();
+        void SpawnGunshipBoardingWave();
+
+        TimerManager m_gunshipTimers;
+        ObjectGuid m_gunshipCrewGuids[14];
+        ObjectGuid m_gunshipFreezeMageGuid;
+        bool m_gunshipFreezeRequested;
+        bool m_gunshipFreezeReady;
+        bool m_gunshipNextArtilleryCall;
+
         void JustDidDialogueStep(int32 iEntry) override;
 
         void ProcessEventNpcs(Player* pPlayer);
@@ -392,7 +410,7 @@ class instance_icecrown_citadel : public ScriptedInstance, private DialogueHelpe
         uint32 m_uiPutricideValveTimer;
         uint8 m_lightsHammerDamnedKills;
         uint32 m_gunshipResetTimer;
-        uint32 m_gunshipVictoryTeleportTimer;
+        uint32 m_gunshipVictorySceneTimer;
 
         bool m_bHasMarrowgarIntroYelled;
         bool m_bHasDeathwhisperIntroYelled;

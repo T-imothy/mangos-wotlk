@@ -2463,3 +2463,8 @@ INSERT INTO spell_scripts(Id, ScriptName) VALUES
 (26505, 'spell_lunar_festival_cluster_big_u'),
 (26510, 'spell_lunar_festival_cluster_big_u'),
 (26515, 'spell_lunar_festival_cluster_big_u');
+
+DELETE FROM spell_scripts WHERE Id IN (73077,72340);
+INSERT INTO spell_scripts (Id, ScriptName) VALUES
+(73077, 'spell_gunship_rocket_pack'),
+(72340, 'spell_gunship_victory_teleport');

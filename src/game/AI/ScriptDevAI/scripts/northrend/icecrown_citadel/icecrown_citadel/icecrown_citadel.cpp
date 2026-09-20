@@ -107,17 +107,15 @@ namespace
 {
 Transport* GetGunshipTransport(Map* map, uint32 entry)
 {
-    for (Transport* transport : map->GetTransports())
-        if (transport->GetEntry() == entry)
-            return transport;
-
-    return nullptr;
+    TransportTemplate const* transportTemplate = sTransportMgr.GetTransportTemplate(entry);
+    return transportTemplate ? static_cast<Transport*>(map->GetTransport(
+        ObjectGuid(HIGHGUID_MO_TRANSPORT, transportTemplate->counter))) : nullptr;
 }
 
 void StartGunshipTransport(Map* map, uint32 entry)
 {
     if (Transport* transport = GetGunshipTransport(map, entry))
-        transport->StartMovementNow();
+        transport->SetGoState(GO_STATE_ACTIVE);
 }
 }
 
@@ -159,7 +157,7 @@ instance_icecrown_citadel::instance_icecrown_citadel(Map* pMap) : ScriptedInstan
     m_uiPutricideValveTimer(0),
     m_lightsHammerDamnedKills(0),
     m_gunshipResetTimer(0),
-    m_gunshipVictoryTeleportTimer(0),
+    m_gunshipVictorySceneTimer(0),
     m_bHasMarrowgarIntroYelled(false),
     m_bHasDeathwhisperIntroYelled(false),
     m_bHasRimefangLanded(false),
@@ -176,8 +174,9 @@ void instance_icecrown_citadel::Initialize()
     m_lightsHammerDamnedKills = 0;
     m_lightsHammerDamnedGuids.clear();
     m_gunshipResetTimer = 0;
-    m_gunshipVictoryTeleportTimer = 0;
+    m_gunshipVictorySceneTimer = 0;
     m_gunshipReloadPending = false;
+    InitializeGunshipActions();
 
     for (bool& i : m_abAchievCriteria)
         i = false;
@@ -265,26 +264,8 @@ void instance_icecrown_citadel::OnPlayerEnter(Player* pPlayer)
         ProcessEventNpcs(pPlayer);
     }
 
-    // Rocket packs are encounter tools with no charges. They persist through
-    // a wipe for the next attempt, but must be removed once Gunship is DONE,
-    // including from a player who logged out before the victory transport
-    // stopped.
     if (m_auiEncounter[TYPE_GUNSHIP_BATTLE] == DONE)
-        pPlayer->DestroyItemCount(ITEM_GOBLIN_ROCKET_PACK,
-            pPlayer->GetItemCount(ITEM_GOBLIN_ROCKET_PACK), true);
-}
-
-void instance_icecrown_citadel::OnPlayerLeave(Player* pPlayer)
-{
-    if (!pPlayer)
-        return;
-
-    // The Goblin Rocket Pack is an ICC Gunship encounter tool. Retail keeps
-    // it through a wipe so the raid can immediately make another attempt, but
-    // it must not leave map 631 with the player. DestroyItemCount covers both
-    // equipped and bagged copies and is also safe when the count is zero.
-    pPlayer->DestroyItemCount(ITEM_GOBLIN_ROCKET_PACK,
-        pPlayer->GetItemCount(ITEM_GOBLIN_ROCKET_PACK), true);
+        pPlayer->RemoveAurasDueToSpell(SPELL_ROCKET_PACK);
 }
 
 void instance_icecrown_citadel::OnCreatureCreate(Creature* pCreature)
@@ -575,6 +556,7 @@ void instance_icecrown_citadel::OnCreatureEnterCombat(Creature* pCreature)
 
 void instance_icecrown_citadel::OnCreatureDeath(Creature* pCreature)
 {
+    GunshipCrewDied(pCreature);
     switch (pCreature->GetEntry())
     {
         case NPC_THE_DAMNED:
@@ -727,16 +709,12 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
             m_auiEncounter[uiType] = uiData;
             if (uiData == DONE)
             {
-                // Release controlled cannon riders before moving them away
-                // from the transport.  Teleporting during the same update
-                // can race the vehicle exit packet and leave the client
-                // bound to a destroyed cannon, so the final relocation is
-                // deferred to Update().
+                if (Creature* enemyShip = GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_ORGRIMS_HAMMER : NPC_SKYBREAKER))
+                    enemyShip->CastSpell(enemyShip, SPELL_TELEPORT_PLAYERS_VICTORY, TRIGGERED_OLD_TRIGGERED);
                 for (auto& playerRef : instance->GetPlayers())
                     if (Player* player = playerRef.getSource())
-                        if (player->IsBoarded())
-                            player->ExitVehicle();
-                m_gunshipVictoryTeleportTimer = 1500;
+                        player->RemoveAurasDueToSpell(SPELL_ROCKET_PACK);
+                m_gunshipVictorySceneTimer = 1;
 
                 // Spawn and enable the difficulty-specific armory. All four
                 // variants are stored under their faction's base entry.
@@ -780,8 +758,7 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
                     pSource->PlayMusic(0);
                 }
 
-                if (Creature* pEnemyCaptain = GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_GUNSHIP_SAURFANG : NPC_GUNSHIP_MURADIN))
-                    pEnemyCaptain->AI()->SendAIEvent(AI_EVENT_CUSTOM_B, pEnemyCaptain, pEnemyCaptain);
+                StopGunshipActions();
 
                 // move the actual gunships to next position
                 StartGunshipTransport(instance, m_uiTeam == ALLIANCE ? GO_ORGRIMS_HAMMER_A : GO_ORGRIMS_HAMMER_H);
@@ -838,10 +815,7 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
                 if (Creature* pSource = GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_GUNSHIP_MURADIN : NPC_GUNSHIP_SAURFANG))
                     pSource->PlayMusic(MUSIC_ID_GUNSHIP);
 
-                // The enemy captain owns the ranged crews, freeze mage and
-                // timed boarding waves for either faction.
-                if (Creature* pEnemyCaptain = GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_GUNSHIP_SAURFANG : NPC_GUNSHIP_MURADIN))
-                    pEnemyCaptain->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, pEnemyCaptain, pEnemyCaptain);
+                StartGunshipActions();
             }
             else if (uiData == FAIL)
             {
@@ -869,8 +843,7 @@ void instance_icecrown_citadel::SetData(uint32 uiType, uint32 uiData)
                 if (Creature* pShip = GetSingleCreatureFromStorage(NPC_ORGRIMS_HAMMER))
                     pShip->SetHealth(pShip->GetMaxHealth());
 
-                if (Creature* pEnemyCaptain = GetSingleCreatureFromStorage(m_uiTeam == ALLIANCE ? NPC_GUNSHIP_SAURFANG : NPC_GUNSHIP_MURADIN))
-                    pEnemyCaptain->AI()->SendAIEvent(AI_EVENT_CUSTOM_B, pEnemyCaptain, pEnemyCaptain);
+                StopGunshipActions();
 
                 // Give reset teleports time to land, then remove and recreate
                 // the opposing transport so its static passengers and route
@@ -1220,26 +1193,25 @@ void instance_icecrown_citadel::Load(const char* strIn)
 void instance_icecrown_citadel::Update(uint32 uiDiff)
 {
     DialogueUpdate(uiDiff);
+    if (GetData(TYPE_GUNSHIP_BATTLE) == IN_PROGRESS)
+        m_gunshipTimers.UpdateTimers(uiDiff);
 
-    if (m_gunshipVictoryTeleportTimer)
+    if (m_gunshipVictorySceneTimer)
     {
-        if (m_gunshipVictoryTeleportTimer > uiDiff)
-            m_gunshipVictoryTeleportTimer -= uiDiff;
+        if (m_gunshipVictorySceneTimer > uiDiff)
+            m_gunshipVictorySceneTimer -= uiDiff;
         else
         {
-            m_gunshipVictoryTeleportTimer = 0;
+            m_gunshipVictorySceneTimer = 0;
             Player* eventPlayer = nullptr;
             for (auto& playerRef : instance->GetPlayers())
                 if (Player* player = playerRef.getSource())
                 {
-                    if (player->IsBoarded())
-                        player->ExitVehicle();
-                    player->DestroyItemCount(ITEM_GOBLIN_ROCKET_PACK,
-                        player->GetItemCount(ITEM_GOBLIN_ROCKET_PACK), true);
-                    // This is the destination of the retail victory spell.
-                    // Direct relocation occurs only after the vehicle exit
-                    // has been processed, preventing a stale cannon mover.
-                    player->TeleportTo(instance->GetId(), -548.983f, 2211.24f, 539.29f, 0.0f);
+                    if (player->IsBeingTeleported())
+                    {
+                        m_gunshipVictorySceneTimer = 100;
+                        return;
+                    }
                     if (!eventPlayer)
                         eventPlayer = player;
                 }
@@ -1286,9 +1258,9 @@ void instance_icecrown_citadel::Update(uint32 uiDiff)
                         }
 
                 if (enemyGunship)
-                    enemyGunship->RemoveFromMap();
+                    enemyGunship->AddObjectToRemoveList();
                 if (playerGunship)
-                    playerGunship->RemoveFromMap();
+                    playerGunship->AddObjectToRemoveList();
 
                 m_gunshipReloadPending = true;
                 m_gunshipResetTimer = 1000;

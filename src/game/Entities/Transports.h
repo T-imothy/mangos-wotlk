@@ -114,8 +114,7 @@ class Transport : public GenericTransport
         void SpawnPassengers() override;
         void SpawnPassengersIfDespawned() override;
         void DespawnPassengers() override;
-        void RemoveFromMap();
-        void StartMovementNow();
+        void RemoveFromWorld() override;
 
         bool IsCrossMapTransport() const override;
     private:

@@ -901,22 +901,6 @@ bool WorldSession::ProcessMovementInfo(MovementInfo& movementInfo, Unit* mover, 
     if (plMover && plMover->IsBeingTeleported() && recv_data.GetOpcode() != CMSG_MOVE_SET_COLLISION_HGT_ACK)
         return false;
 
-    // ICC gunship cannons are rooted transport passengers, but their aim is
-    // controlled by client movement packets. Match the Trinity/AzerothCore
-    // fixed-vehicle path: retain authoritative world and transport offsets,
-    // while accepting the complete client-reported orientation state.
-    if (mover->GetEntry() == 36838 || mover->GetEntry() == 36839)
-        if (VehicleInfo* vehicleInfo = mover->GetVehicleInfo())
-            if (vehicleInfo->GetVehicleEntry()->m_flags & VEHICLE_FLAG_FIXED_POSITION)
-            {
-                // The rooted client cannot translate the cannon. Do not
-                // rewrite either its world or transport position block here:
-                // both reference cores persist that complete packet, and its
-                // paired orientations must remain in the same client frame.
-                movementInfo.RemoveMovementFlag(MOVEFLAG_MASK_MOVING);
-                movementInfo.AddMovementFlag(MOVEFLAG_ROOT);
-            }
-
     if (!VerifyMovementInfo(movementInfo, mover, recv_data.GetOpcode() == CMSG_FORCE_MOVE_UNROOT_ACK))
         return false;
 

@@ -955,14 +955,7 @@ void VehicleInfo::RemoveSeatMods(Unit* passenger, uint32 seatFlags)
         {
             CharmInfo* charmInfo = pVehicle->GetCharmInfo();
 
-            // A player can be force-teleported or have GM state changed while
-            // leaving a controlled vehicle on a moving transport. In that
-            // recovery path the client/control flags may already be cleared,
-            // and therefore there is no CharmInfo left to reset. Unboarding
-            // must still complete; aborting here leaves the player chained to
-            // the destroyed vehicle/transport and crashes mangosd.
-            if (!charmInfo)
-                sLog.outError("VehicleInfo::RemoveSeatMods: missing CharmInfo while unboarding passenger %s from vehicle %s", passenger->GetGuidStr().c_str(), pVehicle->GetGuidStr().c_str());
+            MANGOS_ASSERT(charmInfo);
 
             pPlayer->SetCharm(nullptr);
             pVehicle->SetCharmer(nullptr);
@@ -978,8 +971,7 @@ void VehicleInfo::RemoveSeatMods(Unit* passenger, uint32 seatFlags)
 
             pVehicle->clearUnitState(UNIT_STAT_POSSESSED);
 
-            if (charmInfo)
-                charmInfo->ResetCharmState();
+            charmInfo->ResetCharmState();
 
             // must be called after movement control unapplying
             pPlayer->GetCamera().ResetView();

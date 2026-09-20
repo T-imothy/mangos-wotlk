@@ -459,16 +459,8 @@ void Object::BuildMovementUpdate(ByteBuffer* data, uint16 updateFlags) const
     {
         *data << uint32(((Unit*)this)->GetVehicleInfo()->GetVehicleEntry()->m_ID); // vehicle id
 
-        // A vehicle carried by a moving transport is oriented in the
-        // transport's local coordinate system. Sending its world orientation
-        // here gives the client the transport rotation twice when the vehicle
-        // becomes the active mover. This is especially visible on gunship
-        // cannons as inverted steering and 180-degree heading flips.
         WorldObject const* vehicle = static_cast<WorldObject const*>(this);
-        if (vehicle->GetTransport())
-            *data << float(vehicle->GetTransOffsetO());
-        else
-            *data << float(vehicle->GetOrientation());
+        *data << float(vehicle->GetPosition(vehicle->GetTransport()).o);
     }
 
     // 0x200
