@@ -29,7 +29,7 @@ if(BUILD_PLAYERBOTS)
     PlayerBots
     SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/modules/PlayerBots"
     GIT_REPOSITORY "https://github.com/T-imothy/playerbots.git"
-        GIT_TAG "2e74784e40793077358749f35f781539ed3bcf18" # ManTech baseline; restores explicit summon post-arrival revival
+        GIT_TAG "78bd495168e9e794252a09ec98aca991773436c4" # ManTech baseline; initializes Wrath auction-bot payment timestamps
   )
 
   FetchContent_GetProperties(PlayerBots)
