@@ -1714,8 +1714,10 @@ void World::SetInitialWorldSettings()
 
     ManTechPortableUtilityGrant::BackfillExistingCharacters();
 
-    sLog.outString("ARCH3_STARTUP realm=wotlk world_db=%s character_db=%s data_dir=%s",
-        REVISION_DB_MANGOS, REVISION_DB_CHARACTERS, m_dataPath.c_str());
+    sLog.outString("ARCH3_STARTUP realm=wotlk data_dir=%s", m_dataPath.c_str());
+    sLog.outString("ARCH3_STARTUP required DB revision identifiers (not error messages):");
+    sLog.outString("  World:      %s", REVISION_DB_MANGOS);
+    sLog.outString("  Characters: %s", REVISION_DB_CHARACTERS);
     bool arch3WorldMigrationReady = false;
     if (auto migrationTable = WorldDatabase.Query("SHOW TABLES LIKE 'mantech_migration'"))
         arch3WorldMigrationReady = static_cast<bool>(WorldDatabase.Query("SELECT 1 FROM mantech_migration WHERE id='arch3-world-wotlk-v1' LIMIT 1"));

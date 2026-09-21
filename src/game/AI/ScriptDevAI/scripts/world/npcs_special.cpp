@@ -1803,7 +1803,9 @@ struct npc_the_cleanerAI : public ScriptedAI
 
     void Reset() override
     {
-        DoCastSpellIfCan(m_creature, SPELL_IMMUNITY, CAST_TRIGGERED);
+        // Classic/TBC spell 29230 supplied school immunity (mask 127), but
+        // that spell no longer exists in Wrath's spell data.
+        m_creature->ApplySpellImmune(nullptr, IMMUNITY_SCHOOL, SPELL_SCHOOL_MASK_ALL, true);
         m_uiDespawnTimer = 3000;
     }
 

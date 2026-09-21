@@ -29,7 +29,7 @@ if(BUILD_PLAYERBOTS)
     PlayerBots
     SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/modules/PlayerBots"
     GIT_REPOSITORY "https://github.com/T-imothy/playerbots.git"
-        GIT_TAG "78bd495168e9e794252a09ec98aca991773436c4" # ManTech baseline; initializes Wrath auction-bot payment timestamps
+        GIT_TAG "c8065014a5a53c1c5d4b5ea92fde8db5d9f45497" # ManTech baseline: shared registries, party support and warning fixes
   )
 
   FetchContent_GetProperties(PlayerBots)
