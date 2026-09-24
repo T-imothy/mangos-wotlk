@@ -85,6 +85,17 @@ void WorldSession::HandleUseItemOpcode(WorldPacket& recvPacket)
         return;
     }
 
+    // The portable hammer migrated from the engineering summon to a distinct
+    // cooldown carrier. Wrath clients submit the cached spell ID, unlike the
+    // older clients' item spell index. Accept only this known migration after
+    // inventory/GUID validation; the normal item/cast/cooldown checks still run.
+    if (pItem->GetEntry() == 65001 && spellid == 44389 &&
+        proto->Spells[0].SpellId == 28020 && proto->Spells[0].SpellTrigger == ITEM_SPELLTRIGGER_ON_USE)
+    {
+        spellid = 28020;
+        SendItemQuerySingleResponse(pItem->GetEntry());
+    }
+
     // some item classes can be used only in equipped state
     if (proto->InventoryType != INVTYPE_NON_EQUIP && !pItem->IsEquipped())
     {
