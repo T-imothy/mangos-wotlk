@@ -25,7 +25,102 @@ EndScriptData */
 EndContentData */
 
 #include "AI/ScriptDevAI/include/sc_common.h"
+#include "AI/EventAI/CreatureEventAI.h"
+
+// Native CMaNGOS TBC collapse/reignite implementation (208166dbc).
+struct npc_core_hound : public CreatureEventAI
+{
+    enum CoreHoundMoltenCore
+    {
+        REIGNITE_TIMER          = 0,
+
+        SPELL_FULL_HEAL         = 17683,
+        SPELL_FIRE_NOVA_VISUAL  = 19823,
+        SPELL_PACIFY_SELF       = 19951,
+
+        NPC_CORE_HOUND = 11671,
+
+        EMOTE_SMOLDER   = 7866,
+        EMOTE_REIGNITE  = 7867,
+    };
+
+    npc_core_hound(Creature* creature) : CreatureEventAI(creature)
+    {
+        SetDeathPrevention(true);
+        AddCustomAction(REIGNITE_TIMER, true, [this] { HandleReigniteTimer(); });
+    }
+
+    void Reset() override
+    {
+        CreatureEventAI::Reset();
+        SetDeathPrevention(true);
+    }
+
+    // Reignite, exiting a fake death.
+    void Reignite()
+    {
+        m_creature->SetStandState(UNIT_STAND_STATE_STAND);
+        m_creature->RemoveAurasDueToSpell(SPELL_PACIFY_SELF);
+        DoCastSpellIfCan(nullptr, SPELL_FULL_HEAL, CAST_TRIGGERED);
+        DoResetThreat();
+        SetCombatMovement(true);
+
+        SetDeathPrevention(true);
+
+        DoBroadcastText(EMOTE_REIGNITE, m_creature); // %s reignites from the heat of another Core Hound!
+    }
+
+    // Collapse, entering a fake death.
+    // Notes:
+    // * You can still target a collapsed Core Hound.
+    // * You can still damage a collapsed Core Hound.
+    // * They keep debuffs (Curse of the Elements, Sunders, etc).
+    // To do:
+    // * Confirm they keep combo points.
+    void Collapse()
+    {
+        DoBroadcastText(EMOTE_SMOLDER, m_creature); // %s collapses and begins to smolder.
+
+        ResetTimer(REIGNITE_TIMER, 10000);
+
+        DoCastSpellIfCan(nullptr, SPELL_PACIFY_SELF, CAST_TRIGGERED);
+
+        m_creature->SetTarget(nullptr);
+        SetCombatMovement(false);
+        m_creature->SetStandState(UNIT_STAND_STATE_DEAD);
+    }
+
+    void JustPreventedDeath(Unit* /*attacker*/) override
+    {
+        Collapse();
+    }
+
+    void HandleReigniteTimer()
+    {
+        // Reignite if there are still other core hounds alive 10 seconds after the collapse.
+        std::list<Creature*> coreHounds;
+        GetCreatureListWithEntryInGrid(coreHounds, m_creature, NPC_CORE_HOUND, 40.0f);
+        for (Creature* coreHound : coreHounds)
+        {
+            // Ignore alive core hounds in groups not in combat with us.
+            if (coreHound && coreHound->IsInCombat() && coreHound->GetHealth() > 1)
+            {
+                Reignite();
+                DoCastSpellIfCan(nullptr, SPELL_FIRE_NOVA_VISUAL, CAST_TRIGGERED);
+                return;
+            }
+        }
+
+        // No other core hounds alive: really die (and despawn the corpse).
+        m_creature->Suicide();
+        m_creature->ForcedDespawn();
+    }
+};
 
 void AddSC_molten_core()
 {
+    Script* script = new Script;
+    script->Name = "npc_core_hound";
+    script->GetAI = &GetNewAIInstance<npc_core_hound>;
+    script->RegisterSelf();
 }
