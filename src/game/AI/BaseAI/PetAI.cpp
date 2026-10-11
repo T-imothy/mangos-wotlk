@@ -118,7 +118,7 @@ void PetAI::MoveInLineOfSight(Unit* who)
 void PetAI::AttackStart(Unit* who)
 {
 #ifdef ENABLE_PLAYERBOTS
-    if (ai::HasEncounterDamagePause(EncounterBotOwner(m_unit))) return;
+    if (ai::HasEncounterDamagePause(EncounterBotOwner(m_unit)) || ai::HasMajordomoDamageShield(EncounterBotOwner(m_unit),who)) return;
 #endif
     if (m_pet && m_pet->HasActionsDisabled())
         return;
@@ -183,6 +183,11 @@ void PetAI::UpdateAI(const uint32 diff)
 
     Unit* victim = m_pet && m_pet->HasActionsDisabled() ? nullptr : m_unit->GetVictim();
 #ifdef ENABLE_PLAYERBOTS
+    if (Player* botOwner = EncounterBotOwner(m_unit))
+    {
+        ai::StopUnsafeEncounterOffense(botOwner,m_unit);
+        victim=m_unit->GetVictim();
+    }
     if (Player* botOwner = EncounterBotOwner(m_unit))
         if (ai::HasEncounterDamagePause(botOwner))
         {
