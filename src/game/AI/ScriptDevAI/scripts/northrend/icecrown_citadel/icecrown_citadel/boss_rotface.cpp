@@ -435,7 +435,7 @@ struct UnstableOozeRotface : public SpellScript
                 case 1: DoBroadcastText(EMOTE_OOZE_GROW_1, target); break;
                 case 2: DoBroadcastText(EMOTE_OOZE_GROW_2, target); break;
                 case 4: target->AI()->SendAIEvent(AI_EVENT_CUSTOM_A, spell->GetCaster(), target);
-                // no break;
+                [[fallthrough]];
                 case 3: DoBroadcastText(EMOTE_OOZE_GROW_3, target); break;
             }
         }

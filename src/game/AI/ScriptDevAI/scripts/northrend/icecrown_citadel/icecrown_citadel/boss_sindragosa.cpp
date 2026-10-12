@@ -538,7 +538,7 @@ struct boss_sindragosaAI : public ScriptedAI
                 else
                     m_uiIceTombSingleTimer -= uiDiff;
 
-                // no break
+                [[fallthrough]];
             }
             case SINDRAGOSA_PHASE_GROUND:
             {

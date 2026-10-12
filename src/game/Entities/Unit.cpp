@@ -5350,6 +5350,20 @@ float Unit::GetTotalAuraMultiplierByMiscValue(AuraType auratype, int32 misc_valu
     return multiplier;
 }
 
+float Unit::GetTotalAuraMultiplierByMiscValueAB(AuraType auratype, int32 miscValue, int32 miscValueB) const
+{
+    float multiplier = 1.0f;
+
+    AuraList const& mTotalAuraList = GetAurasByType(auratype);
+    for (auto i : mTotalAuraList)
+    {
+        Modifier* mod = i->GetModifier();
+        if (mod->m_miscvalue == miscValue && i->GetSpellProto()->EffectMiscValueB[i->GetEffIndex()] == miscValueB)
+            multiplier *= (100.0f + mod->m_amount) / 100.0f;
+    }
+    return multiplier;
+}
+
 int32 Unit::GetMaxPositiveAuraModifierByMiscValue(AuraType auratype, int32 misc_value) const
 {
     int32 modifier = 0;
@@ -5592,7 +5606,7 @@ bool Unit::AddSpellAuraHolder(SpellAuraHolder* holder)
                 case TRACK_AURA_TYPE_CONTROL_VEHICLE:       // Only track the controlled vehicle, no secondary effects
                     if (!IsSpellHaveAura(aurSpellInfo, SPELL_AURA_CONTROL_VEHICLE, holder->GetAuraFlags()))
                         break;
-                // no break here, track other controlled
+                    [[fallthrough]]; // no break here, track other controlled
                 case TRACK_AURA_TYPE_SINGLE_TARGET:         // Register spell holder single target
                     scTargets[aurSpellInfo] = GetObjectGuid();
                     break;
