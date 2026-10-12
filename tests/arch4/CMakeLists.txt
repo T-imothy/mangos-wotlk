@@ -221,3 +221,8 @@ if(WIN32 AND MSVC AND BUILD_PLAYERBOTS)
   add_test(NAME urgent_attack COMMAND ${Python3_EXECUTABLE} ${_arch4_playerbots_source}/tests/urgent_attack_regression.py)
   add_test(NAME raid_entry_roster COMMAND ${Python3_EXECUTABLE} ${_arch4_playerbots_source}/tests/recruitment_regression.py ${_arch4_playerbots_source})
 endif()
+
+if(WIN32 AND MSVC AND BUILD_PLAYERBOTS)
+  add_test(NAME explicit_attack_wait COMMAND ${Python3_EXECUTABLE} ${_arch4_playerbots_source}/tests/explicit_attack_wait_regression.py)
+  add_test(NAME mc_pack_engagement COMMAND ${Python3_EXECUTABLE} ${_arch4_playerbots_source}/tests/mc_pack_engagement_regression.py)
+endif()
