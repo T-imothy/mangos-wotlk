@@ -6,11 +6,12 @@
 #include <cstdlib>
 using int32=std::int32_t; using uint32=std::uint32_t; using AuraType=unsigned;
 struct Modifier { int32 m_amount=0,m_miscvalue=0; };
-struct SpellEntry { int EquippedItemClass=-1; };
+struct SpellEntry { int EquippedItemClass=-1; int32 EffectMiscValueB[3]={}; };
 struct Aura {
-    Modifier modifier; SpellEntry spell;
+    Modifier modifier; SpellEntry spell; unsigned effectIndex=0;
     Modifier* GetModifier(){return &modifier;}
     SpellEntry const* GetSpellProto() const {return &spell;}
+    unsigned GetEffIndex() const {return effectIndex;}
 };
 struct Item { bool IsFitToSpellRequirements(SpellEntry const*) const {return true;} };
 struct Unit {
@@ -39,6 +40,7 @@ int main(){
             CHECK(u.GetMaxNegativeAuraModifierByMiscMask(type,3)==0);
             CHECK(u.GetTotalAuraModifierByMiscValue(type,3)==0);
             CHECK(u.GetTotalAuraMultiplierByMiscValue(type,3)==1.f);
+            CHECK(u.GetTotalAuraMultiplierByMiscValueAB(type,3,3)==1.f);
             CHECK(u.GetMaxPositiveAuraModifierByMiscValue(type,3)==0);
             CHECK(u.GetMaxNegativeAuraModifierByMiscValue(type,3)==0);
             CHECK(u.GetMaxPositiveAuraModifierByItemClass(type,&weapon)==0);
@@ -48,6 +50,12 @@ int main(){
         Aura positive{{20,1}},negative{{-10,2}},other{{30,1}};
         auto const& stable=u.GetAurasByType(42);auto end=stable.end();
         u.m_modAuras.Mutable(42)={&positive,&negative,&other};
+        positive.spell.EffectMiscValueB[0]=3;
+        negative.effectIndex=1;negative.spell.EffectMiscValueB[1]=4;
+        other.effectIndex=2;other.spell.EffectMiscValueB[2]=3;
+        CHECK(std::abs(u.GetTotalAuraMultiplierByMiscValueAB(42,1,3)-1.56f)<.0001f);
+        CHECK(std::abs(u.GetTotalAuraMultiplierByMiscValueAB(42,2,4)-.9f)<.0001f);
+        CHECK(u.GetTotalAuraMultiplierByMiscValueAB(42,1,4)==1.f);
         CHECK(u.GetTotalAuraModifier(42)==40);
         CHECK(std::abs(u.GetTotalAuraMultiplier(42)-1.404f)<.0001f);
         CHECK(u.GetMaxPositiveAuraModifier(42)==30);

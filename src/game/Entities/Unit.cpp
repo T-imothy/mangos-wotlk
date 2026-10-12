@@ -5354,7 +5354,7 @@ float Unit::GetTotalAuraMultiplierByMiscValueAB(AuraType auratype, int32 miscVal
 {
     float multiplier = 1.0f;
 
-    AuraList const& mTotalAuraList = GetAurasByType(auratype);
+    AuraList const& mTotalAuraList = m_modAuras[auratype];
     for (auto i : mTotalAuraList)
     {
         Modifier* mod = i->GetModifier();
