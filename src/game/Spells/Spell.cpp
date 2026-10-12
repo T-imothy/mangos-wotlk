@@ -709,6 +709,7 @@ void Spell::FillTargetMap()
                     for (Corpse* corpse : corpseTargetList)
                         AddCorpseTarget(corpse, effectMask);
                 }
+                [[fallthrough]];
             case TARGET_TYPE_UNIT:
             case TARGET_TYPE_UNIT_DEST:
             case TARGET_TYPE_PLAYER: // for now player handled here
@@ -726,7 +727,7 @@ void Spell::FillTargetMap()
                         AddItemTarget(item, targetMask[0]); // no spell in all of vanilla through wotlk has item target in B
                 if (effectTargetType == TARGET_TYPE_ITEM)
                     break;
-                // [[fallthrough]]
+                [[fallthrough]];
             case TARGET_TYPE_GAMEOBJECT:
                 processedGOs = true;
                 for (uint8 rightTarget = 0; rightTarget < 2; ++rightTarget) // need to process target A and B separately due to effect masks
@@ -2000,6 +2001,7 @@ void Spell::SetTargetMap(SpellEffectIndex effIndex, uint32 targetMode, bool targ
                 case TARGET_LOCATION_CASTER_FRONT:                                break;
                 case TARGET_LOCATION_CASTER_BACK:        angle += M_PI_F;         break;
                 case TARGET_LOCATION_UNIT_MINION_POSITION: caster = GetCastingObject(); // projected from original caster if necessary
+                    [[fallthrough]];
                 case TARGET_LOCATION_CASTER_LEFT:        angle += M_PI_F / 2;     break;
                 case TARGET_LOCATION_CASTER_RIGHT:       angle -= M_PI_F / 2;     break;
             }
@@ -2599,7 +2601,7 @@ void Spell::SetTargetMap(SpellEffectIndex effIndex, uint32 targetMode, bool targ
                             itr = tempGOList.erase(itr);
                             continue;
                         }
-                    // no break here
+                        [[fallthrough]];
                     case TARGET_ENUM_GAMEOBJECTS_SCRIPT_AOE_AT_SRC_LOC:
                     case TARGET_ENUM_GAMEOBJECTS_SCRIPT_AOE_AT_DEST_LOC:
                     default:
@@ -3457,7 +3459,7 @@ void Spell::cancel()
         case SPELL_STATE_CASTING:
             if (m_caster)
                 m_caster->ResetGCD(m_spellInfo);
-            // [[fallthrough]]
+            [[fallthrough]];
         case SPELL_STATE_TRAVELING:
             SendInterrupted(SPELL_FAILED_INTERRUPTED);
             if (sendInterrupt)
@@ -3465,7 +3467,7 @@ void Spell::cancel()
             break;
         case SPELL_STATE_LANDING:
             sLog.outError("Spell [%u] is interrupted while processing", m_spellInfo->Id);
-            // [[fallthrough]]
+            [[fallthrough]];
         case SPELL_STATE_CHANNELING:
             for (auto& ihit : m_UniqueTargetInfo)
             {
@@ -4309,39 +4311,6 @@ void Spell::finish(bool ok)
         m_caster->DealHeal(m_caster, uint32(m_healthLeech) - absorb, m_spellInfo, false, absorb);
     }
 
-    if (m_spellInfo->HasAttribute(SPELL_ATTR_EX_DISCOUNT_POWER_ON_MISS) || m_spellInfo->HasAttribute(SPELL_ATTR_EX_FINISHING_MOVE_DAMAGE))
-    {
-        for (TargetList::const_iterator ihit = m_UniqueTargetInfo.begin(); ihit != m_UniqueTargetInfo.end(); ++ihit)
-        {
-            bool end = false;
-            switch (ihit->missCondition)
-            {
-                case SPELL_MISS_MISS:
-                case SPELL_MISS_DODGE:
-                case SPELL_MISS_PARRY:
-                case SPELL_MISS_DEFLECT:
-                {
-                    float coeff = 0.8f;
-                    if (m_spellInfo->HasAttribute(SPELL_ATTR_EX_FINISHING_MOVE_DAMAGE)) // optimization in wotlk because no other utilize it
-                    {
-                        coeff = 1;
-                        if (Player* modOwner = m_caster->GetSpellModOwner())
-                            modOwner->ApplySpellMod(m_spellInfo->Id, SPELLMOD_SPELL_COST_REFUND_ON_FAIL, coeff);
-                        coeff = 1 - coeff;
-                    }
-                    if (coeff > 0)
-                        m_caster->ModifyPower(Powers(m_spellInfo->powerType), int32(float(m_powerCost) * coeff));
-                    end = true;
-                    break;
-                }
-                default:
-                    break;
-            }
-            if (end)
-                break;
-        }
-    }
-
     OnSuccessfulFinish();
 
     // Clear combo at finish state
@@ -5154,24 +5123,65 @@ void Spell::TakePower()
         return;
     }
 
+    int32 finalPowerCost = m_powerCost;
+
     Powers powerType = Powers(m_spellInfo->powerType);
+    bool hit = true;
+    if (m_spellInfo->HasAttribute(SPELL_ATTR_EX_DISCOUNT_POWER_ON_MISS) || m_spellInfo->HasAttribute(SPELL_ATTR_EX_FINISHING_MOVE_DAMAGE))
+    {
+        for (TargetList::const_iterator ihit = m_UniqueTargetInfo.begin(); ihit != m_UniqueTargetInfo.end(); ++ihit)
+        {
+            bool end = false;
+            switch (ihit->missCondition)
+            {
+                case SPELL_MISS_MISS:
+                case SPELL_MISS_DODGE:
+                case SPELL_MISS_PARRY:
+                case SPELL_MISS_DEFLECT:
+                {
+                    float coeff = 0.8f;
+                    if (powerType != POWER_RUNE)
+                    {
+                        if (m_spellInfo->HasAttribute(SPELL_ATTR_EX_FINISHING_MOVE_DAMAGE)) // optimization in wotlk because no other utilize it
+                        {
+                            coeff = 1;
+                            if (Player* modOwner = m_caster->GetSpellModOwner())
+                                modOwner->ApplySpellMod(m_spellInfo->Id, SPELLMOD_SPELL_COST_REFUND_ON_FAIL, coeff);
+                            coeff = 1 - coeff;
+                            if (coeff != 1)
+                                finalPowerCost = int32(float(finalPowerCost) * coeff);
+                        }
+                        else if (coeff > 0)
+                            finalPowerCost = int32(float(finalPowerCost) * coeff);
+                    }
+                    hit = false;
+                    end = true;
+                    break;
+                }
+                default:
+                    break;
+            }
+            if (end)
+                break;
+        }
+    }
 
     if (powerType == POWER_RUNE)
     {
-        CheckOrTakeRunePower(true);
+        CheckOrTakeRunePower(true, hit);
         return;
     }
 
-    m_caster->ModifyPower(powerType, -(int32)m_powerCost);
+    m_caster->ModifyPower(powerType, -finalPowerCost);
 
     // Set the five second timer
     if (powerType == POWER_MANA && m_powerCost > 0 && !m_spellInfo->HasAttribute(SPELL_ATTR_EX2_DONT_BLOCK_MANA_REGEN))
         m_caster->SetLastManaUse();
 }
 
-SpellCastResult Spell::CheckOrTakeRunePower(bool take)
+SpellCastResult Spell::CheckOrTakeRunePower(bool take, bool hit)
 {
-    if (m_caster->GetTypeId() != TYPEID_PLAYER)
+    if (!m_caster->IsPlayer())
         return SPELL_CAST_OK;
 
     Player* plr = (Player*)m_caster;
@@ -5216,8 +5226,8 @@ SpellCastResult Spell::CheckOrTakeRunePower(bool take)
             if (plr->GetRuneCooldown(i) != 0)
                 continue;
 
-            if (take)
-                plr->SetRuneCooldown(i, plr->GetRuneBaseCooldown(i));     // 5*2=10 sec
+            if (hit)
+                plr->SetRuneCooldown(i, plr->GetRuneBaseCooldown(i));
 
             --runeCost[rune];
         }
@@ -5227,7 +5237,7 @@ SpellCastResult Spell::CheckOrTakeRunePower(bool take)
             if (runeCost[i] > 0)
                 runeCost[RUNE_DEATH] += runeCost[i];
 
-        // scan death runes
+        // find a Death rune where the base rune matches the one we need
         if (runeCost[RUNE_DEATH] > 0)
         {
             for (uint32 i = 0; i < MAX_RUNES && runeCost[RUNE_DEATH]; ++i)
@@ -5240,12 +5250,42 @@ SpellCastResult Spell::CheckOrTakeRunePower(bool take)
                 if (plr->GetRuneCooldown(i) != 0)
                     continue;
 
-                if (take)
-                    plr->SetRuneCooldown(i, RUNE_COOLDOWN); // 5*2=10 sec
+                RuneType baseRune = plr->GetBaseRune(i);
+                if (runeCost[baseRune] == 0)
+                    continue;
+
+                if (hit)
+                    plr->SetRuneCooldown(i, plr->GetRuneBaseCooldown(i));
+
+                --runeCost[baseRune];
+                --runeCost[rune];
+
+                // keep Death Rune type if missed
+                if (take && hit)
+                    plr->RestoreBaseRune(i);
+            }
+        }
+
+        // scan any other death runes
+        if (runeCost[RUNE_DEATH] > 0)
+        {
+            for (uint32 i = 0; i < MAX_RUNES && runeCost[RUNE_DEATH]; ++i)
+            {
+                RuneType rune = plr->GetCurrentRune(i);
+                if (rune != RUNE_DEATH)
+                    continue;
+
+                // already used
+                if (plr->GetRuneCooldown(i) != 0)
+                    continue;
+
+                if (hit)
+                    plr->SetRuneCooldown(i, plr->GetRuneBaseCooldown(i));
 
                 --runeCost[rune];
 
-                if (take)
+                // keep Death Rune type if missed
+                if (take && hit)
                     plr->RestoreBaseRune(i);
             }
         }
@@ -6709,8 +6749,8 @@ SpellCastResult Spell::CheckCast(bool strict)
                     if (target->GetMapId() != mapId)
                         return SPELL_FAILED_TARGET_NOT_IN_INSTANCE;
                 }
-                break;
 #endif
+                break;
             }
             case SPELL_EFFECT_SUMMON_PLAYER:
             {
@@ -7573,7 +7613,7 @@ SpellCastResult Spell::CheckPower(bool strict)
     // check rune cost only if a spell has PowerType == POWER_RUNE
     if (m_spellInfo->powerType == POWER_RUNE)
     {
-        SpellCastResult failReason = CheckOrTakeRunePower(false);
+        SpellCastResult failReason = CheckOrTakeRunePower(false, true);
         if (failReason != SPELL_CAST_OK)
             return failReason;
     }
@@ -9023,6 +9063,7 @@ void Spell::GetSpellRangeAndRadius(SpellEffectIndex effIndex, float& radius, boo
                 case 56429:                                 // Summon Arcane Bomb (Eye of Eternity, Malygos) - only target A
                     if (targetB)
                         break;
+                    [[fallthrough]];
                 case 69057:                                 // Bone Spike Graveyard (Icecrown Citadel, Lord Marrowgar encounter, 10N)
                 case 70826:                                 // Bone Spike Graveyard (Icecrown Citadel, Lord Marrowgar encounter, 25N)
                 case 72088:                                 // Bone Spike Graveyard (Icecrown Citadel, Lord Marrowgar encounter, 10H)
@@ -9066,6 +9107,7 @@ void Spell::GetSpellRangeAndRadius(SpellEffectIndex effIndex, float& radius, boo
                     radius = CONTACT_DISTANCE;
                     break;
             }
+            [[fallthrough]];
         }
         default:
             break;

@@ -508,6 +508,7 @@ void instance_blackwing_lair::Update(uint32 uiDiff)
                         DoOrSimulateScriptTextForThisInstance(EMOTE_REDSHARD_TAUNT_2, NPC_LORD_VICTOR_NEFARIUS);
                         DoOrSimulateScriptTextForThisInstance(YELL_REDSHARD_TAUNT_7, NPC_LORD_VICTOR_NEFARIUS);
                     }
+                    [[fallthrough]];
                 default:    // Something weird happened: stop timer and fail the event
                     m_uiScepterEpicTimer = 0;
                     SetData(TYPE_QUEST_SCEPTER, FAIL);
@@ -747,9 +748,9 @@ struct go_ai_suppression : public GameObjectAI
         if (m_go->GetLootState() == GO_ACTIVATED)
         {
             if (pInstance->GetData(TYPE_LASHLAYER) != DONE)
-                m_go->SetRespawnTime(urand(30, 2 * MINUTE));
+                m_go->SetRespawnTime(std::chrono::seconds(urand(30, 2 * MINUTE)));
             else
-                m_go->SetRespawnTime(7 * 24 * HOUR);
+                m_go->SetRespawnTime(std::chrono::seconds(7 * 24 * HOUR));
         }
     }
 

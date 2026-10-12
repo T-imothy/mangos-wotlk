@@ -582,6 +582,7 @@ void Pet::SetOwnerGuid(ObjectGuid owner)
         case GUARDIAN_PET:
             if (!m_controllableGuardian)
                 break;
+            [[fallthrough]];
         case SUMMON_PET:
         case HUNTER_PET:
             SetSummonerGuid(owner);
@@ -1963,7 +1964,7 @@ bool Pet::resetTalents(bool no_cost)
 
         if (player->GetMoney() < cost)
         {
-            player->SendBuyError(BUY_ERR_NOT_ENOUGHT_MONEY, nullptr, 0, 0);
+            player->SendBuyError(BuyResult::NOT_ENOUGHT_MONEY, nullptr, 0);
             return false;
         }
     }

@@ -1132,6 +1132,7 @@ void Aura::PickTargetsForSpellTrigger(Unit*& triggerCaster, Unit*& triggerTarget
             triggerCaster = GetCaster();
             if (triggerCaster)
                 triggerTargetObject = GetCaster()->GetChannelObject();
+            [[fallthrough]];
         case TARGET_LOCATION_CASTER_SRC: // TODO: this needs to be done whenever target isnt important, doing it per case for safety
             //[[fallthrough]]
         case TARGET_LOCATION_CASTER_DEST:
@@ -4138,7 +4139,7 @@ void Aura::HandleAuraModShapeshift(bool apply, bool Real)
             case FORM_CAT: // need to cast Track Humanoids if no other tracking is on
                 if (target->HasSpell(5225) && !target->HasAura(2383) && !target->HasAura(2580))
                     target->CastSpell(nullptr, 5225, TRIGGERED_OLD_TRIGGERED);
-                // no break
+                [[fallthrough]];
             case FORM_BEAR:
             case FORM_DIREBEAR:
             {
@@ -4269,6 +4270,7 @@ void Aura::HandleAuraTransform(bool apply, bool Real)
                             m_modifier.m_amount = 29204;    // Catrina
                             break;
                     }
+                    [[fallthrough]];
                 }
                 // case 65511:                              // Gossip NPC Appearance - Brewfest
                 // break;
@@ -5863,6 +5865,7 @@ void Aura::HandlePeriodicTriggerSpell(bool apply, bool /*Real*/)
                         ((Creature*)target)->ForcedDespawn();
                     }
                 }
+                [[fallthrough]];
             default:
                 break;
         }
@@ -6013,6 +6016,7 @@ void Aura::HandleAuraPeriodicDummy(bool apply, bool Real)
                     break;
                 }
             }
+            [[fallthrough]];
         }
         case SPELLFAMILY_ROGUE:
         {
@@ -6717,6 +6721,8 @@ void Aura::HandleModPowerRegenPCT(bool /*apply*/, bool Real)
         static_cast<Player*>(GetTarget())->UpdateManaRegen();
     else if (m_modifier.m_miscvalue == POWER_ENERGY)
         static_cast<Player*>(GetTarget())->UpdateEnergyRegen();
+    else if (m_modifier.m_miscvalue == POWER_RUNE)
+        static_cast<Player*>(GetTarget())->UpdateRuneRegen(GetSpellProto()->EffectMiscValueB[GetEffIndex()]);
 }
 
 void Aura::HandleModHealingPCT(bool apply, bool real)
@@ -6769,7 +6775,7 @@ void Aura::HandleAuraModIncreaseHealth(bool apply, bool Real)
         case 61254:                                         // Will of Sartharion (Obsidian Sanctum)
             if (Real && apply)
                 m_modifier.m_amount = target->GetMaxHealth() * m_modifier.m_amount / 100;
-        // no break here
+            [[fallthrough]];
 
         // Cases where m_amount already has the correct value (spells cast with CastCustomSpell or absolute values)
         case 4148:                                          // Growl of Fortitude
@@ -10638,184 +10644,6 @@ void SpellAuraHolder::HandleSpellSpecificBoosts(bool apply)
             switch (GetId())
             {
                 case 49039: boostSpells.push_back(50397); break;        // Lichborne
-
-                case 48263:                                 // Frost Presence
-                case 48265:                                 // Unholy Presence
-                case 48266:                                 // Blood Presence
-                {
-                    // else part one per 3 pair
-                    if (GetId() == 48263 || GetId() == 48265) // Frost Presence or Unholy Presence
-                    {
-                        // Improved Blood Presence
-                        int32 heal_pct = 0;
-                        if (apply)
-                        {
-                            Unit::AuraList const& bloodAuras = m_target->GetAurasByType(SPELL_AURA_DUMMY);
-                            for (auto bloodAura : bloodAuras)
-                            {
-                                // skip same icon
-                                if (bloodAura->GetSpellProto()->SpellFamilyName == SPELLFAMILY_DEATHKNIGHT &&
-                                    bloodAura->GetSpellProto()->SpellIconID == 2636)
-                                {
-                                    heal_pct = bloodAura->GetModifier()->m_amount;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (heal_pct)
-                            m_target->CastCustomSpell(m_target, 63611, &heal_pct, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED, nullptr, nullptr, GetCasterGuid());
-                        else
-                            m_target->RemoveAurasDueToSpell(63611);
-                    }
-                    else
-                        boostSpells.push_back(63611);                   // Improved Blood Presence, trigger for heal
-
-                    if (GetId() == 48263 || GetId() == 48266) // Frost Presence or Blood Presence
-                    {
-                        // Improved Unholy Presence
-                        int32 power_pct = 0;
-                        if (apply)
-                        {
-                            Unit::AuraList const& unholyAuras = m_target->GetAurasByType(SPELL_AURA_DUMMY);
-                            for (auto unholyAura : unholyAuras)
-                            {
-                                // skip same icon
-                                if (unholyAura->GetSpellProto()->SpellFamilyName == SPELLFAMILY_DEATHKNIGHT &&
-                                    unholyAura->GetSpellProto()->SpellIconID == 2633)
-                                {
-                                    power_pct = unholyAura->GetModifier()->m_amount;
-                                    break;
-                                }
-                            }
-                        }
-                        if (power_pct || !apply)
-                            boostSpells.push_back(49772);               // Unholy Presence, speed part, spell1 used for Improvement presence fit to own presence
-                    }
-                    else
-                                boostSpells.push_back(49772);                   // Unholy Presence move speed
-
-                    if (GetId() == 48265 || GetId() == 48266)   // Unholy Presence or Blood Presence
-                    {
-                        // Improved Frost Presence
-                        int32 stamina_pct = 0;
-                        if (apply)
-                        {
-                            Unit::AuraList const& frostAuras = m_target->GetAurasByType(SPELL_AURA_DUMMY);
-                            for (auto frostAura : frostAuras)
-                            {
-                                // skip same icon
-                                if (frostAura->GetSpellProto()->SpellFamilyName == SPELLFAMILY_DEATHKNIGHT &&
-                                    frostAura->GetSpellProto()->SpellIconID == 2632)
-                                {
-                                    stamina_pct = frostAura->GetModifier()->m_amount;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (stamina_pct)
-                            m_target->CastCustomSpell(m_target, 61261, &stamina_pct, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED, nullptr, nullptr, GetCasterGuid());
-                        else
-                            m_target->RemoveAurasDueToSpell(61261);
-                    }
-                    else
-                        boostSpells.push_back(61261);                   // Frost Presence, stamina
-
-                    if (GetId() == 48265)                   // Unholy Presence
-                    {
-                        // Improved Unholy Presence, special case for own presence
-                        int32 power_pct = 0;
-                        if (apply)
-                        {
-                            Unit::AuraList const& unholyAuras = m_target->GetAurasByType(SPELL_AURA_DUMMY);
-                            for (auto unholyAura : unholyAuras)
-                            {
-                                // skip same icon
-                                if (unholyAura->GetSpellProto()->SpellFamilyName == SPELLFAMILY_DEATHKNIGHT &&
-                                    unholyAura->GetSpellProto()->SpellIconID == 2633)
-                                {
-                                    power_pct = unholyAura->GetModifier()->m_amount;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (power_pct)
-                        {
-                            int32 bp = 5;
-                            m_target->CastCustomSpell(m_target, 63622, &bp, &bp, &bp, TRIGGERED_OLD_TRIGGERED, nullptr, nullptr, GetCasterGuid());
-                            m_target->CastCustomSpell(m_target, 65095, &bp, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED, nullptr, nullptr, GetCasterGuid());
-                        }
-                        else
-                        {
-                            m_target->RemoveAurasDueToSpell(63622);
-                            m_target->RemoveAurasDueToSpell(65095);
-                        }
-                    }
-                    break;
-                }
-            }
-
-            // Improved Blood Presence
-            if (GetSpellProto()->SpellIconID == 2636 && m_isPassive)
-            {
-                // if presence active: Frost Presence or Unholy Presence
-                if (apply && (m_target->HasAura(48263) || m_target->HasAura(48265)))
-                {
-                    Aura* aura = GetAuraByEffectIndex(EFFECT_INDEX_0);
-                    if (!aura)
-                        return;
-
-                    int32 bp = aura->GetModifier()->m_amount;
-                    m_target->CastCustomSpell(m_target, 63611, &bp, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED, nullptr, nullptr, GetCasterGuid());
-                }
-                else
-                    m_target->RemoveAurasDueToSpell(63611);
-                return;
-            }
-
-            // Improved Frost Presence
-            if (GetSpellProto()->SpellIconID == 2632 && m_isPassive)
-            {
-                // if presence active: Unholy Presence or Blood Presence
-                if (apply && (m_target->HasAura(48265) || m_target->HasAura(48266)))
-                {
-                    Aura* aura = GetAuraByEffectIndex(EFFECT_INDEX_0);
-                    if (!aura)
-                        return;
-
-                    int32 bp0 = aura->GetModifier()->m_amount;
-                    int32 bp1 = 0;                          // disable threat mod part for not Frost Presence case
-                    m_target->CastCustomSpell(m_target, 61261, &bp0, &bp1, nullptr, TRIGGERED_OLD_TRIGGERED, nullptr, nullptr, GetCasterGuid());
-                }
-                else
-                    m_target->RemoveAurasDueToSpell(61261);
-                return;
-            }
-
-            // Improved Unholy Presence
-            if (GetSpellProto()->SpellIconID == 2633 && m_isPassive)
-            {
-                // if presence active: Unholy Presence
-                if (apply && m_target->HasAura(48265))
-                {
-                    int32 bp = 5;
-                    m_target->CastCustomSpell(m_target, 63622, &bp, &bp, &bp, TRIGGERED_OLD_TRIGGERED, nullptr, nullptr, GetCasterGuid());
-                    m_target->CastCustomSpell(m_target, 65095, &bp, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED, nullptr, nullptr, GetCasterGuid());
-                }
-                else
-                {
-                    m_target->RemoveAurasDueToSpell(63622);
-                    m_target->RemoveAurasDueToSpell(65095);
-                }
-
-                // if presence active: Frost Presence or Blood Presence
-                if (!apply || m_target->HasAura(48263) || m_target->HasAura(48266))
-                    boostSpells.push_back(49772);
-                else
-                    return;
-                break;
             }
             break;
         }
