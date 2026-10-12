@@ -7670,6 +7670,12 @@ void Spell::EffectSummonObjectWild(SpellEffectIndex eff_idx)
     pGameObj->SetSpellId(m_spellInfo->Id);
     pGameObj->SetSpawnerGuid(m_trueCaster->GetObjectGuid());
 
+    // Only the custom portable mailbox overrides the Alliance world template.
+    // Leave native summoned objects and placed mailboxes unchanged.
+    if (m_CastItem && m_CastItem->GetEntry() == 65000 && gameobject_id == 142102 &&
+        m_trueCaster->GetTypeId() == TYPEID_PLAYER)
+        pGameObj->SetUInt32Value(GAMEOBJECT_FACTION, m_trueCaster->GetFaction());
+
     // Wild object not have owner and check clickable by players
     map->Add(pGameObj);
     pGameObj->AIM_Initialize();
