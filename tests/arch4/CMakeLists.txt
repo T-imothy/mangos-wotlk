@@ -226,3 +226,11 @@ if(WIN32 AND MSVC AND BUILD_PLAYERBOTS)
   add_test(NAME explicit_attack_wait COMMAND ${Python3_EXECUTABLE} ${_arch4_playerbots_source}/tests/explicit_attack_wait_regression.py)
   add_test(NAME mc_pack_engagement COMMAND ${Python3_EXECUTABLE} ${_arch4_playerbots_source}/tests/mc_pack_engagement_regression.py)
 endif()
+
+if(WIN32 AND MSVC AND BUILD_PLAYERBOTS)
+  add_test(NAME party_pull_wakeup COMMAND ${Python3_EXECUTABLE} ${_arch4_playerbots_source}/tests/party_pull_wakeup_regression.py)
+endif()
+
+if(WIN32 AND MSVC AND BUILD_PLAYERBOTS)
+  add_test(NAME generic_raid_flee COMMAND ${Python3_EXECUTABLE} ${_arch4_playerbots_source}/tests/generic_raid_flee_regression.py)
+endif()
