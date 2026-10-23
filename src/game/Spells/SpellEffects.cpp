@@ -6825,7 +6825,7 @@ void Spell::EffectAddHonor(SpellEffectIndex /*eff_idx*/)
     {
         // maybe we have correct honor_gain in damage already
         static_cast<Player*>(unitTarget)->RewardHonor(nullptr, 1, (float)damage);
-        sLog.outError("SpellEffect::AddHonor (spell_id %u) rewards %u honor points (non scale) for player: %u", m_spellInfo->Id, damage, ((Player*)unitTarget)->GetGUIDLow());
+        DEBUG_FILTER_LOG(LOG_FILTER_SPELL_CAST, "SpellEffect::AddHonor (spell_id %u) rewards %u honor points (non scale) for player: %u", m_spellInfo->Id, damage, ((Player*)unitTarget)->GetGUIDLow());
     }
 }
 
