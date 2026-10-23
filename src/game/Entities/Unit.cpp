@@ -2048,6 +2048,10 @@ void Unit::CalculateMeleeDamage(Unit* pVictim, CalcDamageInfo* calcDamageInfo, W
             break;
     }
 
+    // Set after the switch above (it assigns HitInfo) and before the immunity/evade early returns
+    if (IsPlayerControlled() && pVictim->IsPlayerControlled())
+        calcDamageInfo->HitInfo |= HITINFO_PVP;
+
     bool immune = true;
 
     for (uint8 i = 0; i < m_weaponDamageInfo.weapon[calcDamageInfo->attackType].lines; i++)
@@ -11397,6 +11401,10 @@ bool Unit::SetConfused(bool apply, ObjectGuid casterGuid, uint32 spellID)
                 Unit* source = (fears.empty() ? nullptr : fears.back()->GetCaster());
                 GetMotionMaster()->MoveFleeing(source ? source : this);
             }
+
+            // The generator that would give control back may be gone (e.g. cleared on uncharm)
+            if (!apply && IsPlayer() && !HasCharmer() && !IsFleeing() && !IsInPanic())
+                static_cast<Player*>(this)->UpdateClientControl(this, true);
         }
 
         if (apply)
@@ -11440,6 +11448,10 @@ bool Unit::SetFleeing(bool apply, ObjectGuid casterGuid/* = ObjectGuid()*/, uint
                 Unit* source = (IsInWorld() ? GetMap()->GetUnit(casterGuid) : nullptr);
                 GetMotionMaster()->MoveFleeing((source ? source : this), duration);
             }
+
+            // The generator that would give control back may be gone (e.g. cleared on uncharm)
+            if (!apply && IsPlayer() && !HasCharmer() && !IsConfused() && !IsInPanic())
+                static_cast<Player*>(this)->UpdateClientControl(this, true);
         }
 
         if (apply)
@@ -13360,8 +13372,20 @@ void Unit::Uncharm(Unit* charmed, uint32 spellId)
         charmed->GetCharmInfo()->ResetCharmState();
         charmedPlayer->DeleteCharmInfo();
 
+        const bool panic = charmed->IsInPanic(), fleeing = charmed->IsFleeing(), confused = charmed->IsConfused();
+
         charmed->GetMotionMaster()->Clear(false, true);
         charmed->GetMotionMaster()->MoveIdle();
+
+        // The clear destroyed the confused or fleeing movement of a player still under crowd control
+        if (confused)
+            charmed->GetMotionMaster()->MoveConfused();
+        else if (fleeing && !panic)
+        {
+            AuraList const& fears = charmed->GetAurasByType(SPELL_AURA_MOD_FEAR);
+            Unit* source = (fears.empty() ? nullptr : fears.back()->GetCaster());
+            charmed->GetMotionMaster()->MoveFleeing(source ? source : this);
+        }
 
         charmed->DeleteThreatList();
 
