@@ -866,10 +866,17 @@ void MapPersistentStateManager::PackInstances() const
     BarGoLink bar(InstanceSet.size() + 1);
     bar.step();
 
-    uint32 InstanceNumber = 2; //Reserve instance id 1 for ebonhold GetTeam() == ALLIANCE.
+    uint32 InstanceNumber = 2; // Instance 1 is reserved for Ebon Hold.
     // we do assume std::set is sorted properly on integer value
     for (uint32 i : InstanceSet)
     {
+        // Preserve a legacy save in the reserved slot. Moving it upwards can
+        // collide with ID 2 and merge references before the primary-key fails.
+        if (i < InstanceNumber)
+        {
+            bar.step();
+            continue;
+        }
         if (i != InstanceNumber)
         {
             CharacterDatabase.BeginTransaction();
