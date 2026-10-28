@@ -104,6 +104,14 @@ enum ThaddiusActions
     THADDIUS_ACTIONS_MAX,
 };
 
+static void ClearThaddiusPlayerCharges(Unit* player)
+{
+    if (!player || player->GetTypeId() != TYPEID_PLAYER) return;
+    for (uint32 spell : {SPELL_POSITIVE_CHARGE, SPELL_NEGATIVE_CHARGE,
+        SPELL_POSITIVE_CHARGE_BUFF, SPELL_NEGATIVE_CHARGE_BUFF})
+        player->RemoveAurasDueToSpell(spell);
+}
+
 struct boss_thaddiusAI : public BossAI
 {
     boss_thaddiusAI(Creature* creature) : BossAI(creature, THADDIUS_ACTIONS_MAX),
@@ -136,8 +144,17 @@ struct boss_thaddiusAI : public BossAI
         m_creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNINTERACTIBLE | UNIT_FLAG_IMMUNE_TO_PLAYER);
     }
 
+    void ClearPlayerCharges()
+    {
+        // Death/reset ends this encounter's polarity, including dead or distant
+        // players in this instance. Never remove unrelated raid auras.
+        for (const auto& reference : m_creature->GetMap()->GetPlayers())
+            ClearThaddiusPlayerCharges(reference.getSource());
+    }
+
     void JustReachedHome() override
     {
+        ClearPlayerCharges();
         if (m_instance)
         {
             m_instance->SetData(TYPE_THADDIUS, FAIL);
@@ -161,6 +178,7 @@ struct boss_thaddiusAI : public BossAI
     void JustDied(Unit* /*killer*/) override
     {
         BossAI::JustDied();
+        ClearPlayerCharges();
 
         if (m_instance)
         {
@@ -328,6 +346,7 @@ struct boss_thaddiusAddsAI : public BossAI
     Creature* GetOtherAdd() const
     // For Stalagg returns feugen, for Feugen returns stalagg
     {
+        if (!m_instance) return nullptr;
         switch (m_creature->GetEntry())
         {
             case NPC_FEUGEN:  return m_instance->GetSingleCreatureFromStorage(NPC_STALAGG);
@@ -418,7 +437,10 @@ struct boss_thaddiusAddsAI : public BossAI
         m_creature->SetStandState(UNIT_STAND_STATE_DEAD);
         SetCombatScriptStatus(true);
 
-        JustDied(attacker);                                  // Texts
+        // A reversible add death is not completion of the shared encounter.
+        // Preserve its death text without invoking BossAI::JustDied(DONE).
+        DoBroadcastText(m_creature->GetEntry() == NPC_FEUGEN ? SAY_FEUG_DEATH : SAY_STAL_DEATH,
+            m_creature, attacker);
         ResetTimer(THADDIUS_ADD_REVIVE, 10s);
     }
 };
