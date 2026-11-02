@@ -29,7 +29,7 @@ if(BUILD_PLAYERBOTS)
     PlayerBots
     SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/modules/PlayerBots"
     GIT_REPOSITORY "https://github.com/T-imothy/playerbots.git"
-        GIT_TAG "b143aba68d50341d43958c324ee1e36f215d8545" # Reviewed WSG/AB/AV parity; inherited dungeon fixes retained
+        GIT_TAG "012b2fe034fe752bf511d85cbae2e7f941621e7f" # Reviewed WSG/AB/AV parity; inherited dungeon fixes retained
   )
 
   FetchContent_GetProperties(PlayerBots)
