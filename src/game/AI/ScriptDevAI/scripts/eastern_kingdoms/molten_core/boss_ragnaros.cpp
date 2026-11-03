@@ -115,7 +115,8 @@ struct boss_ragnarosAI : public CombatAI
         m_bHasYelledMagmaBurst = false;
         m_bHasSubmergedOnce = false;
 
-        m_creature->SetImmobilizedState(true);
+        // Temporary root aura removal must not clear the boss's stationary AI state.
+        SetAIImmobilizedState(true);
 
         m_creature->HandleEmote(EMOTE_STATE_STAND);
         m_creature->RemoveAurasDueToSpell(SPELL_RAGNA_SUBMERGE);
@@ -127,8 +128,9 @@ struct boss_ragnarosAI : public CombatAI
         DespawnGuids(m_spawns);
     }
 
-    void JustDied(Unit* /*killer*/) override
+    void JustDied(Unit* killer) override
     {
+        CombatAI::JustDied(killer);
         if (m_instance)
             m_instance->SetData(TYPE_RAGNAROS, DONE);
     }
@@ -182,6 +184,10 @@ struct boss_ragnarosAI : public CombatAI
 
     void JustSummoned(Creature* summoned) override
     {
+        // Native wild summons can notify through both WorldObject and SpellEffects.
+        // Count each Son and apply each Flame's Intense Heat exactly once.
+        if (std::find(m_spawns.begin(), m_spawns.end(), summoned->GetObjectGuid()) != m_spawns.end()) return;
+        m_spawns.push_back(summoned->GetObjectGuid());
         if (summoned->GetEntry() == NPC_SON_OF_FLAME)
         {
             if (m_phase == PHASE_SUBMERGING || m_phase == PHASE_SUBMERGED)
@@ -198,7 +204,6 @@ struct boss_ragnarosAI : public CombatAI
         else if (summoned->GetEntry() == NPC_FLAME_OF_RAGNAROS)
             summoned->CastSpell(nullptr, SPELL_INTENSE_HEAT, TRIGGERED_OLD_TRIGGERED, nullptr, nullptr, m_creature->GetObjectGuid());
 
-        m_spawns.push_back(summoned->GetObjectGuid());
     }
 
     void SpellHitTarget(Unit* target, const SpellEntry* spellInfo, SpellMissInfo /*missInfo*/) override
